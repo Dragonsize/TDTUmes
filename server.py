@@ -62,13 +62,16 @@ class MessageServer:
     
     def broadcast(self, message, sender_socket):
         """Send a message to all connected clients except the sender."""
+        failed_clients = []
         with self.clients_lock:
             for client in self.clients:
                 if client != sender_socket:
                     try:
                         client.send(message.encode('utf-8'))
                     except (BrokenPipeError, OSError):
-                        self.clients.remove(client)
+                        failed_clients.append(client)
+            for client in failed_clients:
+                self.clients.remove(client)
     
     def remove_client(self, client_socket):
         """Remove a client from the list and close the socket."""
