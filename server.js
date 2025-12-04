@@ -90,6 +90,40 @@ wss.on('connection', (ws, req) => {
                     startTime: data.startTime
                 }));
             }
+            else if (data.type === 'dm') {
+                const targetName = data.target;
+                const content = data.content;
+                let targetClient = null;
+
+                // Find the target user by username
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN && client.userData.username === targetName) {
+                        targetClient = client;
+                    }
+                });
+
+                if (targetClient) {
+                    const dmData = {
+                        type: 'dm',
+                        from: ws.userData.username,
+                        to: targetName,
+                        color: ws.userData.color,
+                        content: content,
+                        timestamp: Date.now()
+                    };
+
+                    // Send to Target
+                    targetClient.send(JSON.stringify(dmData));
+
+                    // Send copy back to Sender (so they see it in their chat)
+                    ws.send(JSON.stringify(dmData));
+                } else {
+                    ws.send(JSON.stringify({
+                        type: 'system',
+                        content: `Error: User '${targetName}' not found.`
+                    }));
+                }
+            }
 
         } catch (e) {
             console.error("Invalid message format");

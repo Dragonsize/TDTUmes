@@ -70,6 +70,7 @@
         .message { margin-bottom: 5px; line-height: 1.4; }
         .system { color: #555; font-style: italic; font-size: 0.9em; }
         .user-msg { color: #fff; }
+        .dm-msg { color: #ff00ff; } /* Purple for DM text */
         .username-tag { font-weight: bold; }
         
         /* Input Area */
@@ -116,7 +117,7 @@
     </div>
 
     <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message..." autofocus>
+        <input type="text" id="messageInput" placeholder="Type a message...(/? for commands)" autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -149,15 +150,17 @@
             } else if (data.type === 'message') {
                 addMessage('user', data.content, data.username, data.color);
             } else if (data.type === 'history') {
-                // Load past messages
                 data.content.forEach(msg => {
                     addMessage('user', msg.content, msg.username, msg.color);
                 });
                 addMessage('system', '--- Chat History Loaded ---');
             } else if (data.type === 'pong') {
-                // Calculate Latency
                 const latency = Date.now() - data.startTime;
                 addMessage('system', `Pong! Latency: ${latency}ms`);
+            } else if (data.type === 'dm') {
+                // DM Format: [DM] Sender -> Receiver
+                const prefix = `[DM] ${data.from} -> ${data.to}`;
+                addMessage('dm', data.content, prefix, data.color);
             }
         };
 
@@ -175,20 +178,34 @@
 
             // Handle Commands
             if (text.startsWith('/')) {
-                const cmd = text.toLowerCase();
+                const parts = text.split(' ');
+                const cmd = parts[0].toLowerCase();
                 
                 if (cmd === '/cls') {
                     chatContainer.innerHTML = '';
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
+                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
                     ws.send(JSON.stringify({
                         type: 'ping',
                         startTime: Date.now()
                     }));
+                }
+                else if (cmd === '/m') {
+                    if (parts.length < 3) {
+                        addMessage('system', 'Usage: /m <username> <message>');
+                    } else {
+                        const target = parts[1];
+                        const content = parts.slice(2).join(' ');
+                        ws.send(JSON.stringify({
+                            type: 'dm',
+                            target: target,
+                            content: content
+                        }));
+                    }
                 }
                 else {
                     addMessage('system', 'Unknown command. Type /? for help.');
@@ -236,15 +253,21 @@
         // 5. UI Helpers
         function addMessage(type, text, username = null, color = null) {
             const div = document.createElement('div');
-            div.className = `message ${type === 'system' ? 'system' : 'user-msg'}`;
             
-            // Preserve whitespace for lists like the help menu
+            // Determine class
+            let msgClass = 'user-msg';
+            if (type === 'system') msgClass = 'system';
+            if (type === 'dm') msgClass = 'dm-msg';
+
+            div.className = `message ${msgClass}`;
             div.style.whiteSpace = "pre-wrap"; 
 
             if (username) {
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'username-tag';
-                nameSpan.textContent = `[${username}] `;
+                // For regular messages: [Username]
+                // For DMs: [DM] User -> User (username param contains full prefix)
+                nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
                 nameSpan.style.color = color || '#fff';
                 
                 const textSpan = document.createElement('span');
