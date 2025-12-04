@@ -36,6 +36,17 @@
             --border-color: #003360;
         }
 
+        /* Ominous Red Theme */
+        body.theme-red {
+            --bg-color: #1a0505;
+            --panel-bg: #0a0000;
+            --text-color: #ffb0b0;
+            --accent-color: #ff0000; /* Neon Red */
+            --header-bg: #360000;
+            --input-bg: #250000;
+            --border-color: #600000;
+        }
+
         /* Rainbow Animation */
         @keyframes rainbow-anim {
             0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
@@ -231,7 +242,8 @@
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/admin@ - Unlock secrets\n/cls - Clear screen\n/? - Show help');
+                    // Removed admin@ from list as requested
+                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
                     ws.send(JSON.stringify({ type: 'ping', startTime: Date.now() }));
@@ -257,7 +269,7 @@
                     ws.send(JSON.stringify({ type: 'set_rainbow' }));
                 }
                 else if (cmd === '/theme') {
-                    if (parts.length < 2) addMessage('system', 'Usage: /theme <purple|blue|default>');
+                    if (parts.length < 2) addMessage('system', 'Usage: /theme <red|purple|blue|default>');
                     else {
                         ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
                     }
@@ -328,6 +340,7 @@
             document.body.className = ''; // Reset
             if (themeName === 'purple') document.body.classList.add('theme-purple');
             if (themeName === 'blue') document.body.classList.add('theme-blue');
+            if (themeName === 'red') document.body.classList.add('theme-red');
             // default has no class
         }
 

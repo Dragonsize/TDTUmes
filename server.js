@@ -107,7 +107,7 @@ wss.on('connection', (ws, req) => {
                 ws.userData.isAdmin = true;
                 ws.send(JSON.stringify({ 
                     type: 'system', 
-                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme <purple|green|blue|default>' 
+                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme <red|purple|blue|default>' 
                 }));
             }
             else if (data.type === 'set_rainbow') {
@@ -167,13 +167,15 @@ function handleDM(ws, data) {
 }
 
 function handleTDTU(ws) {
+    // TDTU #1 ASCII Art
     const asciiArt = `
-████████╗██████╗ ████████╗██╗   ██╗
-╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██████╔╝   ██║   ╚██████╔╝
-   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝
+████████╗██████╗ ████████╗██╗   ██╗    ██╗  ██╗   ██╗
+╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║    ██║  ██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║    ██║  ██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║    ╚═╝  ╚═╝   ╚═╝
+   ██║   ██████╔╝   ██║   ╚██████╔╝    ██╗  ██╗   ██╗
+   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝     ╚═╝  ╚═╝   ╚═╝
+              #1 UNIVERSITY
 `;
     const msgObject = {
         type: 'message',
