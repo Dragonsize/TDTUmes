@@ -16,7 +16,7 @@ const HISTORY_LIMIT = 50;
 
 // Store global state
 let currentTheme = 'default';
-let currentTitle = "Classroom"; // Default Title Changed
+let currentTitle = "TDTU Classroom"; // Default Title Changed
 
 wss.on('connection', (ws, req) => {
     // 1. Get Client Info
