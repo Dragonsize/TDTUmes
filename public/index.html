@@ -117,7 +117,7 @@
     </div>
 
     <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message...(/? for commands)" autofocus>
+        <input type="text" id="messageInput" placeholder="Type a message..." autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -186,7 +186,7 @@
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
+                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/ip <user> - Get User IP\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
                     ws.send(JSON.stringify({
@@ -204,6 +204,17 @@
                             type: 'dm',
                             target: target,
                             content: content
+                        }));
+                    }
+                }
+                else if (cmd === '/ip') {
+                    if (parts.length < 2) {
+                        addMessage('system', 'Usage: /ip <username>');
+                    } else {
+                        const target = parts[1];
+                        ws.send(JSON.stringify({
+                            type: 'get_ip',
+                            target: target
                         }));
                     }
                 }

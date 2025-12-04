@@ -15,16 +15,23 @@ const chatHistory = [];
 const HISTORY_LIMIT = 50;
 
 wss.on('connection', (ws, req) => {
-    // 1. Get the Client Ephemeral Port (used as default ID)
+    // 1. Get Client Info
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    // Handle forwarded headers (x-forwarded-for: client, proxy1, proxy2)
+    if (ip && ip.indexOf(',') > -1) {
+        ip = ip.split(',')[0];
+    }
+    
     const port = req.socket.remotePort;
 
     // 2. Initialize User State
     ws.userData = {
         username: `${port}`,
-        color: getRandomColor()
+        color: getRandomColor(),
+        ip: ip // Store IP internally
     };
 
-    console.log(`Connection from Port: ${port}`);
+    console.log(`Connection from ${ip}:${port}`);
 
     // 3. Send History to the new user immediately
     ws.send(JSON.stringify({
@@ -117,6 +124,28 @@ wss.on('connection', (ws, req) => {
 
                     // Send copy back to Sender (so they see it in their chat)
                     ws.send(JSON.stringify(dmData));
+                } else {
+                    ws.send(JSON.stringify({
+                        type: 'system',
+                        content: `Error: User '${targetName}' not found.`
+                    }));
+                }
+            }
+            else if (data.type === 'get_ip') {
+                const targetName = data.target;
+                let targetClient = null;
+
+                wss.clients.forEach((client) => {
+                    if (client.readyState === WebSocket.OPEN && client.userData.username === targetName) {
+                        targetClient = client;
+                    }
+                });
+
+                if (targetClient) {
+                    ws.send(JSON.stringify({
+                        type: 'system',
+                        content: `User '${targetName}' is connected from IP: ${targetClient.userData.ip}`
+                    }));
                 } else {
                     ws.send(JSON.stringify({
                         type: 'system',
