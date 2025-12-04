@@ -5,24 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Port Chat</title>
     <style>
+        /* --- CSS VARIABLES & THEMES --- */
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #000;
+            --text-color: #ccc;
+            --accent-color: #00ff00; /* Default Neon Green */
+            --header-bg: #2a2a2a;
+            --input-bg: #222;
+            --border-color: #333;
+        }
+
+        body.theme-purple {
+            --bg-color: #1a0520;
+            --panel-bg: #0d0014;
+            --text-color: #e0b0ff;
+            --accent-color: #d000ff; /* Neon Purple */
+            --header-bg: #2d0036;
+            --input-bg: #200025;
+            --border-color: #500060;
+        }
+
+        body.theme-blue {
+            --bg-color: #051020;
+            --panel-bg: #000510;
+            --text-color: #b0e0ff;
+            --accent-color: #0088ff; /* Neon Blue */
+            --header-bg: #001a36;
+            --input-bg: #001225;
+            --border-color: #003360;
+        }
+
+        /* Rainbow Animation */
+        @keyframes rainbow-anim {
+            0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
+            14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
+            28% { color: #ffff00; text-shadow: 0 0 5px #ffff00; }
+            42% { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
+            57% { color: #0000ff; text-shadow: 0 0 5px #0000ff; }
+            71% { color: #4b0082; text-shadow: 0 0 5px #4b0082; }
+            85% { color: #9400d3; text-shadow: 0 0 5px #9400d3; }
+            100% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
+        }
+
+        .rainbow-text {
+            animation: rainbow-anim 3s linear infinite;
+            font-weight: bold;
+        }
+
+        /* --- LAYOUT --- */
         body { 
             font-family: 'Courier New', Courier, monospace; 
-            background: #1a1a1a; 
-            color: #ccc; 
+            background: var(--bg-color);
+            color: var(--text-color);
             margin: 0; 
             padding: 20px; 
             display: flex; 
             flex-direction: column; 
             height: 100vh; 
             box-sizing: border-box; 
+            transition: background 0.5s, color 0.5s;
         }
         
-        /* Header / Settings Area */
         header {
             display: flex;
             gap: 10px;
             padding-bottom: 15px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid var(--border-color);
             margin-bottom: 10px;
             flex-wrap: wrap;
             align-items: center;
@@ -32,12 +81,12 @@
             display: flex;
             align-items: center;
             gap: 5px;
-            background: #2a2a2a;
+            background: var(--header-bg);
             padding: 5px 10px;
             border-radius: 4px;
         }
 
-        label { font-size: 0.8em; color: #888; }
+        label { font-size: 0.8em; color: var(--text-color); opacity: 0.7; }
 
         input[type="text"].settings-input {
             background: transparent;
@@ -47,7 +96,7 @@
             width: 100px;
             font-family: inherit;
         }
-        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid #00ff00; }
+        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid var(--accent-color); }
 
         input[type="color"] {
             background: transparent;
@@ -57,43 +106,43 @@
             cursor: pointer;
         }
 
-        /* Chat Area */
         #chat-container { 
             flex: 1; 
             overflow-y: auto; 
-            border: 1px solid #333; 
+            border: 1px solid var(--border-color);
             padding: 10px; 
             margin-bottom: 10px; 
-            background: #000; 
+            background: var(--panel-bg); 
+            transition: background 0.5s, border-color 0.5s;
         }
         
         .message { margin-bottom: 5px; line-height: 1.4; }
-        .system { color: #555; font-style: italic; font-size: 0.9em; }
-        .user-msg { color: #fff; }
-        .dm-msg { color: #ff00ff; } /* Purple for DM text */
+        .system { color: #777; font-style: italic; font-size: 0.9em; }
+        .user-msg { color: var(--text-color); }
+        .dm-msg { color: #ff00ff; }
         .username-tag { font-weight: bold; }
         
-        /* Input Area */
         #input-area { display: flex; gap: 10px; }
         input#messageInput { 
             flex: 1; 
             padding: 12px; 
-            background: #222; 
-            border: 1px solid #444; 
+            background: var(--input-bg);
+            border: 1px solid var(--border-color); 
             color: #fff; 
             font-family: inherit; 
         }
-        input#messageInput:focus { outline: none; border-color: #00ff00; }
+        input#messageInput:focus { outline: none; border-color: var(--accent-color); }
         
         button { 
             padding: 10px 20px; 
-            background: #00ff00; 
+            background: var(--accent-color); 
             color: #000; 
             border: none; 
             font-weight: bold; 
             cursor: pointer; 
+            transition: background 0.3s;
         }
-        button:hover { background: #00cc00; }
+        button:hover { filter: brightness(1.2); }
     </style>
 </head>
 <body>
@@ -107,7 +156,7 @@
             <label>COLOR:</label>
             <input type="color" id="colorInput" value="#00ff00">
         </div>
-        <div style="flex:1; text-align: right; font-size: 0.8em; color: #555;">
+        <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
             STATUS: <span id="status">Disconnected</span>
         </div>
     </header>
@@ -132,13 +181,11 @@
         const colorInput = document.getElementById('colorInput');
         const statusSpan = document.getElementById('status');
 
-        // 1. Connection Open
         ws.onopen = () => {
             statusSpan.textContent = "Connected";
-            statusSpan.style.color = "#00ff00";
+            statusSpan.style.color = "var(--accent-color)";
         };
 
-        // 2. Handle Incoming Messages
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
@@ -150,17 +197,18 @@
             } else if (data.type === 'message') {
                 addMessage('user', data.content, data.username, data.color);
             } else if (data.type === 'history') {
-                data.content.forEach(msg => {
-                    addMessage('user', msg.content, msg.username, msg.color);
-                });
+                data.content.forEach(msg => addMessage('user', msg.content, msg.username, msg.color));
                 addMessage('system', '--- Chat History Loaded ---');
+            } else if (data.type === 'dm') {
+                const prefix = `[DM] ${data.from} -> ${data.to}`;
+                addMessage('dm', data.content, prefix, data.color);
             } else if (data.type === 'pong') {
                 const latency = Date.now() - data.startTime;
                 addMessage('system', `Pong! Latency: ${latency}ms`);
-            } else if (data.type === 'dm') {
-                // DM Format: [DM] Sender -> Receiver
-                const prefix = `[DM] ${data.from} -> ${data.to}`;
-                addMessage('dm', data.content, prefix, data.color);
+            } 
+            // Theme Update
+            else if (data.type === 'theme') {
+                applyTheme(data.theme);
             }
         };
 
@@ -170,13 +218,10 @@
             addMessage('system', 'Disconnected from server.');
         };
 
-        // 3. Send Functions
         function sendMessage() {
             const text = messageInput.value.trim();
-            
             if (!text) return;
 
-            // Handle Commands
             if (text.startsWith('/')) {
                 const parts = text.split(' ');
                 const cmd = parts[0].toLowerCase();
@@ -186,36 +231,35 @@
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/ip <user> - Get User IP\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
+                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/admin@ - Unlock secrets\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
-                    ws.send(JSON.stringify({
-                        type: 'ping',
-                        startTime: Date.now()
-                    }));
+                    ws.send(JSON.stringify({ type: 'ping', startTime: Date.now() }));
                 }
                 else if (cmd === '/m') {
-                    if (parts.length < 3) {
-                        addMessage('system', 'Usage: /m <username> <message>');
-                    } else {
-                        const target = parts[1];
-                        const content = parts.slice(2).join(' ');
+                    if (parts.length < 3) addMessage('system', 'Usage: /m <username> <message>');
+                    else {
                         ws.send(JSON.stringify({
                             type: 'dm',
-                            target: target,
-                            content: content
+                            target: parts[1],
+                            content: parts.slice(2).join(' ')
                         }));
                     }
                 }
-                else if (cmd === '/ip') {
-                    if (parts.length < 2) {
-                        addMessage('system', 'Usage: /ip <username>');
-                    } else {
-                        const target = parts[1];
-                        ws.send(JSON.stringify({
-                            type: 'get_ip',
-                            target: target
-                        }));
+                else if (cmd === '/tdtu') {
+                    ws.send(JSON.stringify({ type: 'tdtu' }));
+                }
+                // --- SECRET COMMANDS ---
+                else if (cmd === '/admin@') {
+                    ws.send(JSON.stringify({ type: 'admin_login' }));
+                }
+                else if (cmd === '/rainbow') {
+                    ws.send(JSON.stringify({ type: 'set_rainbow' }));
+                }
+                else if (cmd === '/theme') {
+                    if (parts.length < 2) addMessage('system', 'Usage: /theme <purple|blue|default>');
+                    else {
+                        ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
                     }
                 }
                 else {
@@ -226,46 +270,27 @@
                 return;
             }
 
-            // Send Normal Message
-            ws.send(JSON.stringify({
-                type: 'message',
-                content: text
-            }));
+            ws.send(JSON.stringify({ type: 'message', content: text }));
             messageInput.value = '';
         }
 
         function updateName() {
             const newName = usernameInput.value;
-            if (newName) {
-                ws.send(JSON.stringify({
-                    type: 'update_name',
-                    content: newName
-                }));
-            }
+            if (newName) ws.send(JSON.stringify({ type: 'update_name', content: newName }));
         }
 
         function updateColor() {
-            const newColor = colorInput.value;
-            ws.send(JSON.stringify({
-                type: 'update_color',
-                content: newColor
-            }));
+            ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
         }
 
-        // 4. Event Listeners
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
         usernameInput.addEventListener('change', updateName);
         usernameInput.addEventListener('blur', updateName);
         colorInput.addEventListener('change', updateColor);
 
-        // 5. UI Helpers
         function addMessage(type, text, username = null, color = null) {
             const div = document.createElement('div');
             
-            // Determine class
             let msgClass = 'user-msg';
             if (type === 'system') msgClass = 'system';
             if (type === 'dm') msgClass = 'dm-msg';
@@ -276,10 +301,15 @@
             if (username) {
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'username-tag';
-                // For regular messages: [Username]
-                // For DMs: [DM] User -> User (username param contains full prefix)
+                
+                // Handle Rainbow Special Flag
+                if (color === 'rainbow') {
+                    nameSpan.classList.add('rainbow-text');
+                } else {
+                    nameSpan.style.color = color || 'var(--text-color)';
+                }
+                
                 nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
-                nameSpan.style.color = color || '#fff';
                 
                 const textSpan = document.createElement('span');
                 textSpan.textContent = text;
@@ -292,6 +322,13 @@
             
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function applyTheme(themeName) {
+            document.body.className = ''; // Reset
+            if (themeName === 'purple') document.body.classList.add('theme-purple');
+            if (themeName === 'blue') document.body.classList.add('theme-blue');
+            // default has no class
         }
 
         function convertToHex(colorStr) {
