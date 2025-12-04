@@ -142,13 +142,22 @@
             const data = JSON.parse(event.data);
             
             if (data.type === 'init') {
-                // Server assigning our initial state
                 usernameInput.value = data.username;
-                colorInput.value = convertToHex(data.color); // Best effort conversion if HSL
+                colorInput.value = convertToHex(data.color);
             } else if (data.type === 'system') {
                 addMessage('system', data.content);
             } else if (data.type === 'message') {
                 addMessage('user', data.content, data.username, data.color);
+            } else if (data.type === 'history') {
+                // Load past messages
+                data.content.forEach(msg => {
+                    addMessage('user', msg.content, msg.username, msg.color);
+                });
+                addMessage('system', '--- Chat History Loaded ---');
+            } else if (data.type === 'pong') {
+                // Calculate Latency
+                const latency = Date.now() - data.startTime;
+                addMessage('system', `Pong! Latency: ${latency}ms`);
             }
         };
 
@@ -160,14 +169,41 @@
 
         // 3. Send Functions
         function sendMessage() {
-            const text = messageInput.value;
-            if (text) {
-                ws.send(JSON.stringify({
-                    type: 'message',
-                    content: text
-                }));
+            const text = messageInput.value.trim();
+            
+            if (!text) return;
+
+            // Handle Commands
+            if (text.startsWith('/')) {
+                const cmd = text.toLowerCase();
+                
+                if (cmd === '/cls') {
+                    chatContainer.innerHTML = '';
+                    addMessage('system', 'Chat cleared locally.');
+                } 
+                else if (cmd === '/?') {
+                    addMessage('system', 'COMMANDS:\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
+                }
+                else if (cmd === '/ping') {
+                    ws.send(JSON.stringify({
+                        type: 'ping',
+                        startTime: Date.now()
+                    }));
+                }
+                else {
+                    addMessage('system', 'Unknown command. Type /? for help.');
+                }
+                
                 messageInput.value = '';
+                return;
             }
+
+            // Send Normal Message
+            ws.send(JSON.stringify({
+                type: 'message',
+                content: text
+            }));
+            messageInput.value = '';
         }
 
         function updateName() {
@@ -193,11 +229,8 @@
             if (e.key === 'Enter') sendMessage();
         });
 
-        // Update name when user presses Enter or leaves the field
         usernameInput.addEventListener('change', updateName);
         usernameInput.addEventListener('blur', updateName);
-        
-        // Update color when user picks a new one
         colorInput.addEventListener('change', updateColor);
 
         // 5. UI Helpers
@@ -205,8 +238,10 @@
             const div = document.createElement('div');
             div.className = `message ${type === 'system' ? 'system' : 'user-msg'}`;
             
+            // Preserve whitespace for lists like the help menu
+            div.style.whiteSpace = "pre-wrap"; 
+
             if (username) {
-                // User message
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'username-tag';
                 nameSpan.textContent = `[${username}] `;
@@ -218,7 +253,6 @@
                 div.appendChild(nameSpan);
                 div.appendChild(textSpan);
             } else {
-                // System message
                 div.textContent = `> ${text}`;
             }
             
@@ -226,12 +260,8 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // Helper: Browsers color inputs expect Hex, but we might get HSL from server
-        // This is a simple fallback if the server sends HSL, the input might not update visibly
-        // but the value is stored. For full support, a converter is needed, but this is optional.
         function convertToHex(colorStr) {
-            if(colorStr.startsWith('#')) return colorStr;
-            // Return default green if complex HSL string is passed (browser limitation on color inputs)
+            if(colorStr && colorStr.startsWith('#')) return colorStr;
             return "#00ff00"; 
         }
     </script>
