@@ -14,8 +14,9 @@ app.use(express.static(path.join(__dirname, 'public')));
 const chatHistory = [];
 const HISTORY_LIMIT = 50;
 
-// Store global theme
+// Store global state
 let currentTheme = 'default';
+let currentTitle = "Classroom"; // Default Title Changed
 
 wss.on('connection', (ws, req) => {
     // 1. Get Client Info
@@ -36,16 +37,20 @@ wss.on('connection', (ws, req) => {
 
     console.log(`Connection from ${ip}:${port}`);
 
-    // 3. Send Initial Data (History, Theme, Init User)
+    // 3. Send Initial Data (History, Theme, Title, Init User)
     ws.send(JSON.stringify({
         type: 'history',
         content: chatHistory
     }));
 
-    // Send current global theme to new user
     ws.send(JSON.stringify({
         type: 'theme',
         theme: currentTheme
+    }));
+
+    ws.send(JSON.stringify({
+        type: 'title',
+        title: currentTitle
     }));
 
     // Notify others
@@ -107,7 +112,7 @@ wss.on('connection', (ws, req) => {
                 ws.userData.isAdmin = true;
                 ws.send(JSON.stringify({ 
                     type: 'system', 
-                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme <red|purple|blue|default>' 
+                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme, /chattitle, /clearall' 
                 }));
             }
             else if (data.type === 'set_rainbow') {
@@ -123,6 +128,28 @@ wss.on('connection', (ws, req) => {
                     currentTheme = data.theme;
                     broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
                     broadcast(JSON.stringify({ type: 'system', content: `Global theme changed to ${currentTheme}` }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                }
+            }
+            else if (data.type === 'change_title') {
+                if (ws.userData.isAdmin) {
+                    currentTitle = data.title;
+                    broadcast(JSON.stringify({ type: 'title', title: currentTitle }));
+                    broadcast(JSON.stringify({ type: 'system', content: `Room title changed to: ${currentTitle}` }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                }
+            }
+            else if (data.type === 'clear_chat') {
+                if (ws.userData.isAdmin) {
+                    // 1. Clear Server Memory
+                    chatHistory.length = 0;
+                    
+                    // 2. Tell everyone to clear their screens
+                    broadcast(JSON.stringify({ type: 'clear_history' }));
+                    
+                    broadcast(JSON.stringify({ type: 'system', content: 'Chat history has been cleared by an Admin.' }));
                 } else {
                     ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
                 }

@@ -16,14 +16,15 @@
             --border-color: #333;
         }
 
+        /* Dark Neon Purple Theme (Updated: Less Pink, More Purple) */
         body.theme-purple {
-            --bg-color: #1a0520;
-            --panel-bg: #0d0014;
-            --text-color: #e0b0ff;
-            --accent-color: #d000ff; /* Neon Purple */
-            --header-bg: #2d0036;
-            --input-bg: #200025;
-            --border-color: #500060;
+            --bg-color: #12001a;
+            --panel-bg: #08000c;
+            --text-color: #c48eff;
+            --accent-color: #9d00ff; /* True Electric Purple */
+            --header-bg: #1f002b;
+            --input-bg: #16001f;
+            --border-color: #58008c;
         }
 
         body.theme-blue {
@@ -117,6 +118,18 @@
             cursor: pointer;
         }
 
+        #chatTitle {
+            flex: 2;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.2em;
+            color: var(--accent-color);
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         #chat-container { 
             flex: 1; 
             overflow-y: auto; 
@@ -167,6 +180,10 @@
             <label>COLOR:</label>
             <input type="color" id="colorInput" value="#00ff00">
         </div>
+        
+        <!-- CENTER TITLE -->
+        <div id="chatTitle">Classroom</div>
+
         <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
             STATUS: <span id="status">Disconnected</span>
         </div>
@@ -191,6 +208,7 @@
         const usernameInput = document.getElementById('usernameInput');
         const colorInput = document.getElementById('colorInput');
         const statusSpan = document.getElementById('status');
+        const chatTitle = document.getElementById('chatTitle');
 
         ws.onopen = () => {
             statusSpan.textContent = "Connected";
@@ -221,6 +239,14 @@
             else if (data.type === 'theme') {
                 applyTheme(data.theme);
             }
+            // Title Update
+            else if (data.type === 'title') {
+                chatTitle.textContent = data.title;
+            }
+            // Clear History Event
+            else if (data.type === 'clear_history') {
+                chatContainer.innerHTML = '';
+            }
         };
 
         ws.onclose = () => {
@@ -242,7 +268,6 @@
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    // Removed admin@ from list as requested
                     addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
@@ -273,6 +298,15 @@
                     else {
                         ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
                     }
+                }
+                else if (cmd === '/chattitle') {
+                    if (parts.length < 2) addMessage('system', 'Usage: /chattitle <New Title>');
+                    else {
+                        ws.send(JSON.stringify({ type: 'change_title', title: parts.slice(1).join(' ') }));
+                    }
+                }
+                else if (cmd === '/clearall') {
+                    ws.send(JSON.stringify({ type: 'clear_chat' }));
                 }
                 else {
                     addMessage('system', 'Unknown command. Type /? for help.');
