@@ -11,44 +11,73 @@ const wss = new WebSocket.Server({ server });
 app.use(express.static(path.join(__dirname, 'public')));
 
 wss.on('connection', (ws, req) => {
-    // 1. Get the Client IP
-    // Render (and most hosts) put the real IP in the 'x-forwarded-for' header.
-    // If that's missing, we fall back to the direct connection IP.
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    
-    // If x-forwarded-for contains multiple IPs, the first one is the client
-    if (ip && ip.indexOf(',') > -1) {
-        ip = ip.split(',')[0];
-    }
-
-    // 2. Get the Client Ephemeral Port
-    // This is the random port the user's browser opened to talk to the server
+    // 1. Get the Client Ephemeral Port (used as default ID)
     const port = req.socket.remotePort;
 
-    const connectionInfo = `New user connected from IP: ${ip} (Source Port: ${port})`;
-    console.log(connectionInfo);
+    // 2. Initialize User State
+    // Default username is the port, default color is a random HSL value
+    ws.userData = {
+        username: `${port}`,
+        color: getRandomColor()
+    };
 
-    // Broadcast the connection info to EVERYONE so they can see it in the chat
+    // Log internally, but don't broadcast IP anymore
+    console.log(`Connection from Port: ${port}`);
+
+    // Notify everyone of the new joiner
     broadcast(JSON.stringify({
         type: 'system',
-        content: connectionInfo
+        content: `User ${ws.userData.username} joined the chat.`
+    }));
+
+    // Send the user their own initial details so the UI can update
+    ws.send(JSON.stringify({
+        type: 'init',
+        username: ws.userData.username,
+        color: ws.userData.color
     }));
 
     ws.on('message', (message) => {
-        // Broadcast the user's message
-        const msgString = message.toString();
-        
-        broadcast(JSON.stringify({
-            type: 'message',
-            ip: ip, // Tag the message with their IP
-            content: msgString
-        }));
+        try {
+            // We expect JSON messages now for different actions
+            const data = JSON.parse(message);
+
+            if (data.type === 'message') {
+                // Broadcast the user's message with their CURRENT name/color
+                broadcast(JSON.stringify({
+                    type: 'message',
+                    username: ws.userData.username,
+                    color: ws.userData.color,
+                    content: data.content
+                }));
+            } 
+            else if (data.type === 'update_name') {
+                const oldName = ws.userData.username;
+                const newName = data.content.trim().substring(0, 20); // Limit length
+                
+                if (newName && newName !== oldName) {
+                    ws.userData.username = newName;
+                    broadcast(JSON.stringify({
+                        type: 'system',
+                        content: `${oldName} is now known as ${newName}`
+                    }));
+                }
+            }
+            else if (data.type === 'update_color') {
+                ws.userData.color = data.content;
+                // We don't broadcast color changes to avoid spam, 
+                // but next time they speak, it will be the new color.
+            }
+
+        } catch (e) {
+            console.error("Received non-JSON message or invalid format");
+        }
     });
 
     ws.on('close', () => {
         broadcast(JSON.stringify({
             type: 'system',
-            content: `User disconnected (IP: ${ip})`
+            content: `User ${ws.userData.username} disconnected.`
         }));
     });
 });
@@ -62,8 +91,13 @@ function broadcast(data) {
     });
 }
 
+// Helper to generate random bright colors (HSL) for dark mode
+function getRandomColor() {
+    const h = Math.floor(Math.random() * 360);
+    return `hsl(${h}, 70%, 60%)`;
+}
+
 // Start the server
-// Render provides the PORT environment variable
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);

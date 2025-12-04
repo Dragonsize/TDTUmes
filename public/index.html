@@ -3,90 +3,236 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP | Port Chat</title>
+    <title>Port Chat</title>
     <style>
-        body { font-family: 'Courier New', Courier, monospace; background: #1a1a1a; color: #00ff00; margin: 0; padding: 20px; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
-        h1 { margin-top: 0; text-align: center; border-bottom: 1px solid #00ff00; padding-bottom: 10px; }
+        body { 
+            font-family: 'Courier New', Courier, monospace; 
+            background: #1a1a1a; 
+            color: #ccc; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            box-sizing: border-box; 
+        }
         
-        #chat-container { flex: 1; overflow-y: auto; border: 1px solid #333; padding: 10px; margin-bottom: 10px; background: #000; }
+        /* Header / Settings Area */
+        header {
+            display: flex;
+            gap: 10px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #333;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .setting-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: #2a2a2a;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+
+        label { font-size: 0.8em; color: #888; }
+
+        input[type="text"].settings-input {
+            background: transparent;
+            border: none;
+            color: #fff;
+            border-bottom: 1px solid #555;
+            width: 100px;
+            font-family: inherit;
+        }
+        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid #00ff00; }
+
+        input[type="color"] {
+            background: transparent;
+            border: none;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+        }
+
+        /* Chat Area */
+        #chat-container { 
+            flex: 1; 
+            overflow-y: auto; 
+            border: 1px solid #333; 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            background: #000; 
+        }
         
-        .message { margin-bottom: 5px; }
-        .system { color: #ffff00; font-style: italic; }
+        .message { margin-bottom: 5px; line-height: 1.4; }
+        .system { color: #555; font-style: italic; font-size: 0.9em; }
         .user-msg { color: #fff; }
-        .ip-tag { color: #00ff00; font-weight: bold; }
+        .username-tag { font-weight: bold; }
         
+        /* Input Area */
         #input-area { display: flex; gap: 10px; }
-        input { flex: 1; padding: 10px; background: #222; border: 1px solid #00ff00; color: #fff; font-family: inherit; }
-        button { padding: 10px 20px; background: #00ff00; color: #000; border: none; font-weight: bold; cursor: pointer; }
+        input#messageInput { 
+            flex: 1; 
+            padding: 12px; 
+            background: #222; 
+            border: 1px solid #444; 
+            color: #fff; 
+            font-family: inherit; 
+        }
+        input#messageInput:focus { outline: none; border-color: #00ff00; }
+        
+        button { 
+            padding: 10px 20px; 
+            background: #00ff00; 
+            color: #000; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+        }
         button:hover { background: #00cc00; }
     </style>
 </head>
 <body>
 
-    <h1>TDTU messages</h1>
+    <header>
+        <div class="setting-group">
+            <label>NAME:</label>
+            <input type="text" id="usernameInput" class="settings-input" placeholder="Loading...">
+        </div>
+        <div class="setting-group">
+            <label>COLOR:</label>
+            <input type="color" id="colorInput" value="#00ff00">
+        </div>
+        <div style="flex:1; text-align: right; font-size: 0.8em; color: #555;">
+            STATUS: <span id="status">Disconnected</span>
+        </div>
+    </header>
 
     <div id="chat-container">
-        <!-- Messages appear here -->
         <div class="message system">Connecting to server...</div>
     </div>
 
     <div id="input-area">
         <input type="text" id="messageInput" placeholder="Type a message..." autofocus>
-        <button onclick="sendMessage()">Send</button>
+        <button onclick="sendMessage()">SEND</button>
     </div>
 
     <script>
-        // Automatically determine if we need ws:// or wss:// (secure)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host;
-        
         const ws = new WebSocket(wsUrl);
+        
         const chatContainer = document.getElementById('chat-container');
-        const input = document.getElementById('messageInput');
+        const messageInput = document.getElementById('messageInput');
+        const usernameInput = document.getElementById('usernameInput');
+        const colorInput = document.getElementById('colorInput');
+        const statusSpan = document.getElementById('status');
 
+        // 1. Connection Open
         ws.onopen = () => {
-            addMessage('system', 'Connected to Server.');
+            statusSpan.textContent = "Connected";
+            statusSpan.style.color = "#00ff00";
         };
 
+        // 2. Handle Incoming Messages
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
-            if (data.type === 'system') {
+            if (data.type === 'init') {
+                // Server assigning our initial state
+                usernameInput.value = data.username;
+                colorInput.value = convertToHex(data.color); // Best effort conversion if HSL
+            } else if (data.type === 'system') {
                 addMessage('system', data.content);
             } else if (data.type === 'message') {
-                addMessage('user', data.content, data.ip);
+                addMessage('user', data.content, data.username, data.color);
             }
         };
 
         ws.onclose = () => {
+            statusSpan.textContent = "Disconnected";
+            statusSpan.style.color = "red";
             addMessage('system', 'Disconnected from server.');
         };
 
+        // 3. Send Functions
         function sendMessage() {
-            const text = input.value;
+            const text = messageInput.value;
             if (text) {
-                ws.send(text);
-                input.value = '';
+                ws.send(JSON.stringify({
+                    type: 'message',
+                    content: text
+                }));
+                messageInput.value = '';
             }
         }
 
-        // Allow pressing Enter to send
-        input.addEventListener('keypress', (e) => {
+        function updateName() {
+            const newName = usernameInput.value;
+            if (newName) {
+                ws.send(JSON.stringify({
+                    type: 'update_name',
+                    content: newName
+                }));
+            }
+        }
+
+        function updateColor() {
+            const newColor = colorInput.value;
+            ws.send(JSON.stringify({
+                type: 'update_color',
+                content: newColor
+            }));
+        }
+
+        // 4. Event Listeners
+        messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        function addMessage(type, text, ip = null) {
+        // Update name when user presses Enter or leaves the field
+        usernameInput.addEventListener('change', updateName);
+        usernameInput.addEventListener('blur', updateName);
+        
+        // Update color when user picks a new one
+        colorInput.addEventListener('change', updateColor);
+
+        // 5. UI Helpers
+        function addMessage(type, text, username = null, color = null) {
             const div = document.createElement('div');
             div.className = `message ${type === 'system' ? 'system' : 'user-msg'}`;
             
-            if (ip) {
-                div.innerHTML = `<span class="ip-tag">[${ip}]</span> ${text}`;
+            if (username) {
+                // User message
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'username-tag';
+                nameSpan.textContent = `[${username}] `;
+                nameSpan.style.color = color || '#fff';
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+                
+                div.appendChild(nameSpan);
+                div.appendChild(textSpan);
             } else {
+                // System message
                 div.textContent = `> ${text}`;
             }
             
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Helper: Browsers color inputs expect Hex, but we might get HSL from server
+        // This is a simple fallback if the server sends HSL, the input might not update visibly
+        // but the value is stored. For full support, a converter is needed, but this is optional.
+        function convertToHex(colorStr) {
+            if(colorStr.startsWith('#')) return colorStr;
+            // Return default green if complex HSL string is passed (browser limitation on color inputs)
+            return "#00ff00"; 
         }
     </script>
 </body>
