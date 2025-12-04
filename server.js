@@ -110,6 +110,10 @@ wss.on('connection', (ws, req) => {
             // --- SECRET COMMANDS ---
             else if (data.type === 'admin_login') {
                 ws.userData.isAdmin = true;
+                
+                // Tell frontend to enable admin features
+                ws.send(JSON.stringify({ type: 'admin_granted' }));
+                
                 ws.send(JSON.stringify({ 
                     type: 'system', 
                     content: 'ACCESS GRANTED. Secrets: /rainbow, /theme, /chattitle, /clearall' 

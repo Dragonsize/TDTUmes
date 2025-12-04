@@ -210,6 +210,9 @@
         const statusSpan = document.getElementById('status');
         const chatTitle = document.getElementById('chatTitle');
 
+        // State to track admin status
+        let isAdmin = false;
+
         ws.onopen = () => {
             statusSpan.textContent = "Connected";
             statusSpan.style.color = "var(--accent-color)";
@@ -246,6 +249,12 @@
             // Clear History Event
             else if (data.type === 'clear_history') {
                 chatContainer.innerHTML = '';
+            }
+            // Admin Granted Event
+            else if (data.type === 'admin_granted') {
+                isAdmin = true;
+                addMessage('system', '>> Admin Privileges Unlocked <<');
+                addMessage('system', 'Tab-autocomplete updated with secret commands.');
             }
         };
 
@@ -319,6 +328,42 @@
             ws.send(JSON.stringify({ type: 'message', content: text }));
             messageInput.value = '';
         }
+
+        // --- TAB AUTOCOMPLETE (Minecraft-style Cycling) ---
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault(); // Stop focus change
+                
+                const val = messageInput.value;
+                const publicCmds = ['/m ', '/tdtu', '/ping', '/cls', '/?'];
+                const adminCmds = ['/rainbow', '/theme ', '/chattitle ', '/clearall'];
+                
+                // Build the list of commands available to this user
+                let availableCmds = publicCmds;
+                if (isAdmin) {
+                    availableCmds = [...publicCmds, ...adminCmds];
+                }
+                
+                if (val.startsWith('/')) {
+                    // Find all commands that start with current input or are partial matches
+                    const matches = availableCmds.filter(c => c.startsWith(val));
+                    
+                    if (matches.length > 0) {
+                        // Check if the current input is already a complete match
+                        const exactMatchIndex = matches.indexOf(val);
+                        
+                        if (exactMatchIndex !== -1) {
+                            // Cycle to the next match
+                            const nextIndex = (exactMatchIndex + 1) % matches.length;
+                            messageInput.value = matches[nextIndex];
+                        } else {
+                            // First time matching, just pick the first one
+                            messageInput.value = matches[0];
+                        }
+                    }
+                }
+            }
+        });
 
         function updateName() {
             const newName = usernameInput.value;
