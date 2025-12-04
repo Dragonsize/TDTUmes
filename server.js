@@ -1,341 +1,205 @@
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const path = require('path');
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Port Chat</title>
-    <style>
-        /* --- CSS VARIABLES & THEMES --- */
-        :root {
-            --bg-color: #1a1a1a;
-            --panel-bg: #000;
-            --text-color: #ccc;
-            --accent-color: #00ff00; /* Default Neon Green */
-            --header-bg: #2a2a2a;
-            --input-bg: #222;
-            --border-color: #333;
-        }
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-        body.theme-purple {
-            --bg-color: #1a0520;
-            --panel-bg: #0d0014;
-            --text-color: #e0b0ff;
-            --accent-color: #d000ff; /* Neon Purple */
-            --header-bg: #2d0036;
-            --input-bg: #200025;
-            --border-color: #500060;
-        }
+// Serve static files from the 'public' folder
+app.use(express.static(path.join(__dirname, 'public')));
 
-        body.theme-blue {
-            --bg-color: #051020;
-            --panel-bg: #000510;
-            --text-color: #b0e0ff;
-            --accent-color: #0088ff; /* Neon Blue */
-            --header-bg: #001a36;
-            --input-bg: #001225;
-            --border-color: #003360;
-        }
+// Store last 50 messages
+const chatHistory = [];
+const HISTORY_LIMIT = 50;
 
-        /* Rainbow Animation */
-        @keyframes rainbow-anim {
-            0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
-            14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
-            28% { color: #ffff00; text-shadow: 0 0 5px #ffff00; }
-            42% { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
-            57% { color: #0000ff; text-shadow: 0 0 5px #0000ff; }
-            71% { color: #4b0082; text-shadow: 0 0 5px #4b0082; }
-            85% { color: #9400d3; text-shadow: 0 0 5px #9400d3; }
-            100% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
-        }
+// Store global theme
+let currentTheme = 'default';
 
-        .rainbow-text {
-            animation: rainbow-anim 3s linear infinite;
-            font-weight: bold;
-        }
+wss.on('connection', (ws, req) => {
+    // 1. Get Client Info
+    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    if (ip && ip.indexOf(',') > -1) {
+        ip = ip.split(',')[0];
+    }
+    
+    const port = req.socket.remotePort;
 
-        /* --- LAYOUT --- */
-        body { 
-            font-family: 'Courier New', Courier, monospace; 
-            background: var(--bg-color);
-            color: var(--text-color);
-            margin: 0; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            box-sizing: border-box; 
-            transition: background 0.5s, color 0.5s;
-        }
-        
-        header {
-            display: flex;
-            gap: 10px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
+    // 2. Initialize User State
+    ws.userData = {
+        username: `${port}`,
+        color: getRandomColor(),
+        ip: ip,
+        isAdmin: false // Admin privilege flag
+    };
 
-        .setting-group {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: var(--header-bg);
-            padding: 5px 10px;
-            border-radius: 4px;
-        }
+    console.log(`Connection from ${ip}:${port}`);
 
-        label { font-size: 0.8em; color: var(--text-color); opacity: 0.7; }
+    // 3. Send Initial Data (History, Theme, Init User)
+    ws.send(JSON.stringify({
+        type: 'history',
+        content: chatHistory
+    }));
 
-        input[type="text"].settings-input {
-            background: transparent;
-            border: none;
-            color: #fff;
-            border-bottom: 1px solid #555;
-            width: 100px;
-            font-family: inherit;
-        }
-        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid var(--accent-color); }
+    // Send current global theme to new user
+    ws.send(JSON.stringify({
+        type: 'theme',
+        theme: currentTheme
+    }));
 
-        input[type="color"] {
-            background: transparent;
-            border: none;
-            width: 30px;
-            height: 30px;
-            cursor: pointer;
-        }
+    // Notify others
+    broadcast(JSON.stringify({
+        type: 'system',
+        content: `User ${ws.userData.username} joined the chat.`
+    }));
 
-        #chat-container { 
-            flex: 1; 
-            overflow-y: auto; 
-            border: 1px solid var(--border-color);
-            padding: 10px; 
-            margin-bottom: 10px; 
-            background: var(--panel-bg); 
-            transition: background 0.5s, border-color 0.5s;
-        }
-        
-        .message { margin-bottom: 5px; line-height: 1.4; }
-        .system { color: #777; font-style: italic; font-size: 0.9em; }
-        .user-msg { color: var(--text-color); }
-        .dm-msg { color: #ff00ff; }
-        .username-tag { font-weight: bold; }
-        
-        #input-area { display: flex; gap: 10px; }
-        input#messageInput { 
-            flex: 1; 
-            padding: 12px; 
-            background: var(--input-bg);
-            border: 1px solid var(--border-color); 
-            color: #fff; 
-            font-family: inherit; 
-        }
-        input#messageInput:focus { outline: none; border-color: var(--accent-color); }
-        
-        button { 
-            padding: 10px 20px; 
-            background: var(--accent-color); 
-            color: #000; 
-            border: none; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: background 0.3s;
-        }
-        button:hover { filter: brightness(1.2); }
-    </style>
-</head>
-<body>
+    // Send init data to user
+    ws.send(JSON.stringify({
+        type: 'init',
+        username: ws.userData.username,
+        color: ws.userData.color
+    }));
 
-    <header>
-        <div class="setting-group">
-            <label>NAME:</label>
-            <input type="text" id="usernameInput" class="settings-input" placeholder="Loading...">
-        </div>
-        <div class="setting-group">
-            <label>COLOR:</label>
-            <input type="color" id="colorInput" value="#00ff00">
-        </div>
-        <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
-            STATUS: <span id="status">Disconnected</span>
-        </div>
-    </header>
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
 
-    <div id="chat-container">
-        <div class="message system">Connecting to server...</div>
-    </div>
+            if (data.type === 'message') {
+                const msgObject = {
+                    type: 'message',
+                    username: ws.userData.username,
+                    color: ws.userData.color,
+                    content: data.content,
+                    timestamp: Date.now()
+                };
 
-    <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message..." autofocus>
-        <button onclick="sendMessage()">SEND</button>
-    </div>
+                chatHistory.push(msgObject);
+                if (chatHistory.length > HISTORY_LIMIT) chatHistory.shift();
 
-    <script>
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = protocol + '//' + window.location.host;
-        const ws = new WebSocket(wsUrl);
-        
-        const chatContainer = document.getElementById('chat-container');
-        const messageInput = document.getElementById('messageInput');
-        const usernameInput = document.getElementById('usernameInput');
-        const colorInput = document.getElementById('colorInput');
-        const statusSpan = document.getElementById('status');
-
-        ws.onopen = () => {
-            statusSpan.textContent = "Connected";
-            statusSpan.style.color = "var(--accent-color)";
-        };
-
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'init') {
-                usernameInput.value = data.username;
-                colorInput.value = convertToHex(data.color);
-            } else if (data.type === 'system') {
-                addMessage('system', data.content);
-            } else if (data.type === 'message') {
-                addMessage('user', data.content, data.username, data.color);
-            } else if (data.type === 'history') {
-                data.content.forEach(msg => addMessage('user', msg.content, msg.username, msg.color));
-                addMessage('system', '--- Chat History Loaded ---');
-            } else if (data.type === 'dm') {
-                const prefix = `[DM] ${data.from} -> ${data.to}`;
-                addMessage('dm', data.content, prefix, data.color);
-            } else if (data.type === 'pong') {
-                const latency = Date.now() - data.startTime;
-                addMessage('system', `Pong! Latency: ${latency}ms`);
+                broadcast(JSON.stringify(msgObject));
             } 
-            // Theme Update
-            else if (data.type === 'theme') {
-                applyTheme(data.theme);
+            else if (data.type === 'update_name') {
+                const oldName = ws.userData.username;
+                const newName = data.content.trim().substring(0, 20);
+                if (newName && newName !== oldName) {
+                    ws.userData.username = newName;
+                    broadcast(JSON.stringify({
+                        type: 'system',
+                        content: `${oldName} is now known as ${newName}`
+                    }));
+                }
             }
-        };
-
-        ws.onclose = () => {
-            statusSpan.textContent = "Disconnected";
-            statusSpan.style.color = "red";
-            addMessage('system', 'Disconnected from server.');
-        };
-
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text) return;
-
-            if (text.startsWith('/')) {
-                const parts = text.split(' ');
-                const cmd = parts[0].toLowerCase();
-                
-                if (cmd === '/cls') {
-                    chatContainer.innerHTML = '';
-                    addMessage('system', 'Chat cleared locally.');
-                } 
-                else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/admin@ - Unlock secrets\n/cls - Clear screen\n/? - Show help');
-                }
-                else if (cmd === '/ping') {
-                    ws.send(JSON.stringify({ type: 'ping', startTime: Date.now() }));
-                }
-                else if (cmd === '/m') {
-                    if (parts.length < 3) addMessage('system', 'Usage: /m <username> <message>');
-                    else {
-                        ws.send(JSON.stringify({
-                            type: 'dm',
-                            target: parts[1],
-                            content: parts.slice(2).join(' ')
-                        }));
-                    }
-                }
-                else if (cmd === '/tdtu') {
-                    ws.send(JSON.stringify({ type: 'tdtu' }));
-                }
-                // --- SECRET COMMANDS ---
-                else if (cmd === '/admin@') {
-                    ws.send(JSON.stringify({ type: 'admin_login' }));
-                }
-                else if (cmd === '/rainbow') {
-                    ws.send(JSON.stringify({ type: 'set_rainbow' }));
-                }
-                else if (cmd === '/theme') {
-                    if (parts.length < 2) addMessage('system', 'Usage: /theme <purple|blue|default>');
-                    else {
-                        ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
-                    }
-                }
-                else {
-                    addMessage('system', 'Unknown command. Type /? for help.');
-                }
-                
-                messageInput.value = '';
-                return;
+            else if (data.type === 'update_color') {
+                ws.userData.color = data.content;
             }
-
-            ws.send(JSON.stringify({ type: 'message', content: text }));
-            messageInput.value = '';
-        }
-
-        function updateName() {
-            const newName = usernameInput.value;
-            if (newName) ws.send(JSON.stringify({ type: 'update_name', content: newName }));
-        }
-
-        function updateColor() {
-            ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
-        }
-
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-        usernameInput.addEventListener('change', updateName);
-        usernameInput.addEventListener('blur', updateName);
-        colorInput.addEventListener('change', updateColor);
-
-        function addMessage(type, text, username = null, color = null) {
-            const div = document.createElement('div');
-            
-            let msgClass = 'user-msg';
-            if (type === 'system') msgClass = 'system';
-            if (type === 'dm') msgClass = 'dm-msg';
-
-            div.className = `message ${msgClass}`;
-            div.style.whiteSpace = "pre-wrap"; 
-
-            if (username) {
-                const nameSpan = document.createElement('span');
-                nameSpan.className = 'username-tag';
-                
-                // Handle Rainbow Special Flag
-                if (color === 'rainbow') {
-                    nameSpan.classList.add('rainbow-text');
+            else if (data.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong', startTime: data.startTime }));
+            }
+            else if (data.type === 'dm') {
+                handleDM(ws, data);
+            }
+            else if (data.type === 'tdtu') {
+                handleTDTU(ws);
+            }
+            // --- SECRET COMMANDS ---
+            else if (data.type === 'admin_login') {
+                ws.userData.isAdmin = true;
+                ws.send(JSON.stringify({ 
+                    type: 'system', 
+                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme <purple|green|blue|default>' 
+                }));
+            }
+            else if (data.type === 'set_rainbow') {
+                if (ws.userData.isAdmin) {
+                    ws.userData.color = 'rainbow'; // Special color flag
+                    ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode activated!' }));
                 } else {
-                    nameSpan.style.color = color || 'var(--text-color)';
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
                 }
-                
-                nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
-                
-                const textSpan = document.createElement('span');
-                textSpan.textContent = text;
-                
-                div.appendChild(nameSpan);
-                div.appendChild(textSpan);
-            } else {
-                div.textContent = `> ${text}`;
             }
-            
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
+            else if (data.type === 'change_theme') {
+                if (ws.userData.isAdmin) {
+                    currentTheme = data.theme;
+                    broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
+                    broadcast(JSON.stringify({ type: 'system', content: `Global theme changed to ${currentTheme}` }));
+                } else {
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                }
+            }
 
-        function applyTheme(themeName) {
-            document.body.className = ''; // Reset
-            if (themeName === 'purple') document.body.classList.add('theme-purple');
-            if (themeName === 'blue') document.body.classList.add('theme-blue');
-            // default has no class
+        } catch (e) {
+            console.error("Invalid message format");
         }
+    });
 
-        function convertToHex(colorStr) {
-            if(colorStr && colorStr.startsWith('#')) return colorStr;
-            return "#00ff00"; 
+    ws.on('close', () => {
+        broadcast(JSON.stringify({
+            type: 'system',
+            content: `User ${ws.userData.username} disconnected.`
+        }));
+    });
+});
+
+function handleDM(ws, data) {
+    const targetName = data.target;
+    let targetClient = null;
+
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN && client.userData.username === targetName) {
+            targetClient = client;
         }
-    </script>
-</body>
-</html>
+    });
+
+    if (targetClient) {
+        const dmData = {
+            type: 'dm',
+            from: ws.userData.username,
+            to: targetName,
+            color: ws.userData.color,
+            content: data.content
+        };
+        targetClient.send(JSON.stringify(dmData));
+        ws.send(JSON.stringify(dmData));
+    } else {
+        ws.send(JSON.stringify({ type: 'system', content: `Error: User '${targetName}' not found.` }));
+    }
+}
+
+function handleTDTU(ws) {
+    const asciiArt = `
+████████╗██████╗ ████████╗██╗   ██╗
+╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██████╔╝   ██║   ╚██████╔╝
+   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝
+`;
+    const msgObject = {
+        type: 'message',
+        username: ws.userData.username,
+        color: ws.userData.color,
+        content: asciiArt
+    };
+    chatHistory.push(msgObject);
+    if (chatHistory.length > HISTORY_LIMIT) chatHistory.shift();
+    broadcast(JSON.stringify(msgObject));
+}
+
+function broadcast(data) {
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(data);
+        }
+    });
+}
+
+function getRandomColor() {
+    const h = Math.floor(Math.random() * 360);
+    return `hsl(${h}, 70%, 60%)`;
+}
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
