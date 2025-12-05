@@ -116,12 +116,12 @@ wss.on('connection', (ws, req) => {
                 
                 ws.send(JSON.stringify({ 
                     type: 'system', 
-                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme, /chattitle, /clearall, /epa [off]' 
+                    content: 'ACCESS GRANTED. Secrets: /rainbow, /theme, /chattitle, /clearall' 
                 }));
             }
             else if (data.type === 'set_rainbow') {
                 if (ws.userData.isAdmin) {
-                    ws.userData.color = 'rainbow'; 
+                    ws.userData.color = 'rainbow'; // Special color flag
                     ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode activated!' }));
                 } else {
                     ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
@@ -147,8 +147,12 @@ wss.on('connection', (ws, req) => {
             }
             else if (data.type === 'clear_chat') {
                 if (ws.userData.isAdmin) {
+                    // 1. Clear Server Memory
                     chatHistory.length = 0;
+                    
+                    // 2. Tell everyone to clear their screens
                     broadcast(JSON.stringify({ type: 'clear_history' }));
+                    
                     broadcast(JSON.stringify({ type: 'system', content: 'Chat history has been cleared by an Admin.' }));
                 } else {
                     ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
