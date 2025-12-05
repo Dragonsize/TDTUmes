@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TDTU Chat</title>
+    <title>Port Chat</title>
     <style>
         /* --- CSS VARIABLES & THEMES --- */
         :root {
@@ -16,7 +16,7 @@
             --border-color: #333;
         }
 
-        /* Dark Neon Purple Theme (Updated: Less Pink, More Purple) */
+        /* Dark Neon Purple Theme */
         body.theme-purple {
             --bg-color: #12001a;
             --panel-bg: #08000c;
@@ -46,6 +46,23 @@
             --header-bg: #360000;
             --input-bg: #250000;
             --border-color: #600000;
+        }
+
+        /* EPILEPSY MODE (Random Colors) */
+        @keyframes strobe {
+            0% { background-color: #ff0000; filter: hue-rotate(0deg); }
+            20% { background-color: #ffff00; filter: hue-rotate(60deg); }
+            40% { background-color: #00ff00; filter: hue-rotate(120deg); }
+            60% { background-color: #00ffff; filter: hue-rotate(180deg); }
+            80% { background-color: #0000ff; filter: hue-rotate(240deg); }
+            100% { background-color: #ff00ff; filter: hue-rotate(300deg); }
+        }
+
+        body.theme-epilepsy {
+            animation: strobe 0.1s infinite;
+            --text-color: #000;
+            --panel-bg: rgba(255, 255, 255, 0.8);
+            --header-bg: rgba(255, 255, 255, 0.5);
         }
 
         /* Rainbow Animation */
@@ -210,7 +227,6 @@
         const statusSpan = document.getElementById('status');
         const chatTitle = document.getElementById('chatTitle');
 
-        // State to track admin status
         let isAdmin = false;
 
         ws.onopen = () => {
@@ -238,23 +254,19 @@
                 const latency = Date.now() - data.startTime;
                 addMessage('system', `Pong! Latency: ${latency}ms`);
             } 
-            // Theme Update
             else if (data.type === 'theme') {
                 applyTheme(data.theme);
             }
-            // Title Update
             else if (data.type === 'title') {
                 chatTitle.textContent = data.title;
             }
-            // Clear History Event
             else if (data.type === 'clear_history') {
                 chatContainer.innerHTML = '';
             }
-            // Admin Granted Event
             else if (data.type === 'admin_granted') {
                 isAdmin = true;
                 addMessage('system', '>> Admin Privileges Unlocked <<');
-                addMessage('system', 'Tab-autocomplete updated with secret commands.');
+                addMessage('system', 'Secrets Unlocked: /rainbow, /theme, /chattitle, /clearall, /epa [off]');
             }
         };
 
@@ -277,12 +289,174 @@
                     addMessage('system', 'Chat cleared locally.');
                 } 
                 else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
+                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/eps [off] - Toggle Epilepsy Local\n/cls - Clear screen\n/? - Show help');
                 }
                 else if (cmd === '/ping') {
                     ws.send(JSON.stringify({ type: 'ping', startTime: Date.now() }));
                 }
+                // --- LOCAL EPILEPSY CONTROL ---
+                else if (cmd === '/eps' || cmd === '/ep') {
+                    // Check for "off" argument
+                    if (parts[1] === 'off') {
+                        document.body.classList.remove('theme-epilepsy');
+                        addMessage('system', 'Local epilepsy mode OFF.');
+                    } else {
+                        document.body.classList.toggle('theme-epilepsy');
+                        addMessage('system', 'Toggled local epilepsy mode.');
+                    }
+                }
                 else if (cmd === '/m') {
+                    if (parts.length < 3) addMessage('system', 'Usage: /m <username> <message>');
+                    else {
+                        ws.send(JSON.stringify({
+                            type: 'dm',
+                            target: parts[1],
+                            content: parts.slice(2).join(' ')
+                        }));
+                    }
+                }
+                else if (cmd === '/tdtu') {
+                    ws.send(JSON.stringify({ type: 'tdtu' }));
+                }
+                // --- SECRET COMMANDS ---
+                else if (cmd === '/admin@') {
+                    ws.send(JSON.stringify({ type: 'admin_login' }));
+                }
+                else if (cmd === '/rainbow') {
+                    ws.send(JSON.stringify({ type: 'set_rainbow' }));
+                }
+                else if (cmd === '/theme') {
+                    if (parts.length < 2) addMessage('system', 'Usage: /theme <red|purple|blue|default>');
+                    else {
+                        ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
+                    }
+                }
+                else if (cmd === '/chattitle') {
+                    if (parts.length < 2) addMessage('system', 'Usage: /chattitle <New Title>');
+                    else {
+                        ws.send(JSON.stringify({ type: 'change_title', title: parts.slice(1).join(' ') }));
+                    }
+                }
+                else if (cmd === '/clearall') {
+                    ws.send(JSON.stringify({ type: 'clear_chat' }));
+                }
+                // --- GLOBAL EPILEPSY ADMIN CONTROL ---
+                else if (cmd === '/epa') {
+                    if (parts[1] === 'off') {
+                        // Turn off for everyone by resetting theme to default
+                        ws.send(JSON.stringify({ type: 'change_theme', theme: 'default' }));
+                    } else {
+                        ws.send(JSON.stringify({ type: 'change_theme', theme: 'epilepsy' }));
+                    }
+                }
+                else {
+                    addMessage('system', 'Unknown command. Type /? for help.');
+                }
+                
+                messageInput.value = '';
+                return;
+            }
+
+            ws.send(JSON.stringify({ type: 'message', content: text }));
+            messageInput.value = '';
+        }
+
+        // --- TAB AUTOCOMPLETE (Minecraft-style Cycling) ---
+        messageInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault(); 
+                
+                const val = messageInput.value;
+                const publicCmds = ['/m ', '/tdtu', '/ping', '/cls', '/?', '/eps'];
+                const adminCmds = ['/rainbow', '/theme ', '/chattitle ', '/clearall', '/epa'];
+                
+                let availableCmds = publicCmds;
+                if (isAdmin) {
+                    availableCmds = [...publicCmds, ...adminCmds];
+                }
+                
+                if (val.startsWith('/')) {
+                    const matches = availableCmds.filter(c => c.startsWith(val));
+                    if (matches.length > 0) {
+                        const exactMatchIndex = matches.indexOf(val);
+                        if (exactMatchIndex !== -1) {
+                            const nextIndex = (exactMatchIndex + 1) % matches.length;
+                            messageInput.value = matches[nextIndex];
+                        } else {
+                            messageInput.value = matches[0];
+                        }
+                    }
+                }
+            }
+        });
+
+        function updateName() {
+            const newName = usernameInput.value;
+            if (newName) ws.send(JSON.stringify({ type: 'update_name', content: newName }));
+        }
+
+        function updateColor() {
+            ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
+        }
+
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        usernameInput.addEventListener('change', updateName);
+        usernameInput.addEventListener('blur', updateName);
+        colorInput.addEventListener('change', updateColor);
+
+        function addMessage(type, text, username = null, color = null) {
+            const div = document.createElement('div');
+            
+            let msgClass = 'user-msg';
+            if (type === 'system') msgClass = 'system';
+            if (type === 'dm') msgClass = 'dm-msg';
+
+            div.className = `message ${msgClass}`;
+            div.style.whiteSpace = "pre-wrap"; 
+
+            if (username) {
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'username-tag';
+                
+                if (color === 'rainbow') {
+                    nameSpan.classList.add('rainbow-text');
+                } else {
+                    nameSpan.style.color = color || 'var(--text-color)';
+                }
+                
+                nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = text;
+                
+                div.appendChild(nameSpan);
+                div.appendChild(textSpan);
+            } else {
+                div.textContent = `> ${text}`;
+            }
+            
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function applyTheme(themeName) {
+            document.body.className = ''; // Reset
+            if (themeName === 'purple') document.body.classList.add('theme-purple');
+            if (themeName === 'blue') document.body.classList.add('theme-blue');
+            if (themeName === 'red') document.body.classList.add('theme-red');
+            if (themeName === 'epilepsy') document.body.classList.add('theme-epilepsy');
+        }
+
+        function convertToHex(colorStr) {
+            if(colorStr && colorStr.startsWith('#')) return colorStr;
+            return "#00ff00"; 
+        }
+    </script>
+</body>
+</html>
+
+
+  else if (cmd === '/m') {
                     if (parts.length < 3) addMessage('system', 'Usage: /m <username> <message>');
                     else {
                         ws.send(JSON.stringify({
