@@ -10,7 +10,7 @@ const wss = new WebSocket.Server({ server });
 // Serve static files from the 'public' folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store last 50 messages
+// Store last 50 message
 const chatHistory = [];
 const HISTORY_LIMIT = 50;
 
