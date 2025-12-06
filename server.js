@@ -32,50 +32,39 @@ wss.on('connection', (ws, req) => {
         username: `${port}`,
         color: getRandomColor(),
         ip: ip,
-        isAdmin: false // Admin privilege flag
+        isAdmin: false
     };
 
     console.log(`Connection from ${ip}:${port}`);
 
-    // 3. Send Initial Data (History, Theme, Title, Init User)
-    ws.send(JSON.stringify({
-        type: 'history',
-        content: chatHistory
-    }));
+    // 3. Send Initial Data
+    ws.send(JSON.stringify({ type: 'history', content: chatHistory }));
+    ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
+    ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
 
-    ws.send(JSON.stringify({
-        type: 'theme',
-        theme: currentTheme
-    }));
-
-    ws.send(JSON.stringify({
-        type: 'title',
-        title: currentTitle
-    }));
-
-    // Notify others
     broadcast(JSON.stringify({
         type: 'system',
         content: `User ${ws.userData.username} joined the chat.`
     }));
 
-    // Send init data to user
     ws.send(JSON.stringify({
         type: 'init',
         username: ws.userData.username,
         color: ws.userData.color
     }));
 
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
 
             if (data.type === 'message') {
+                // 1. Process User Message
+                const msgContent = data.content;
                 const msgObject = {
                     type: 'message',
                     username: ws.userData.username,
                     color: ws.userData.color,
-                    content: data.content,
+                    content: msgContent,
                     timestamp: Date.now()
                 };
 
@@ -83,6 +72,42 @@ wss.on('connection', (ws, req) => {
                 if (chatHistory.length > HISTORY_LIMIT) chatHistory.shift();
 
                 broadcast(JSON.stringify(msgObject));
+
+                // 2. CHECK FOR AI TRIGGER ("Hey Huybeo")
+                const lowerMsg = msgContent.toLowerCase().trim();
+                if (lowerMsg.startsWith("hey huybeo")) {
+                    // Extract the question (remove "hey huybeo" from start)
+                    const prompt = msgContent.substring(10).trim();
+                    
+                    if (prompt.length > 0) {
+                        // Call AI
+                        const aiResponse = await askHuybeoAI(prompt);
+                        
+                        // Broadcast AI Response
+                        const aiMsgObject = {
+                            type: 'message',
+                            username: "Huybeo (AI)",
+                            color: "#00ccff", // Cyan color for AI
+                            content: aiResponse,
+                            timestamp: Date.now()
+                        };
+                        
+                        chatHistory.push(aiMsgObject);
+                        if (chatHistory.length > HISTORY_LIMIT) chatHistory.shift();
+                        
+                        broadcast(JSON.stringify(aiMsgObject));
+                    } else {
+                        // User said "Hey Huybeo" but nothing else
+                        const aiMsgObject = {
+                            type: 'message',
+                            username: "Huybeo (AI)",
+                            color: "#00ccff",
+                            content: "Yes? How can I help you?",
+                            timestamp: Date.now()
+                        };
+                        broadcast(JSON.stringify(aiMsgObject));
+                    }
+                }
             } 
             else if (data.type === 'update_name') {
                 const oldName = ws.userData.username;
@@ -110,10 +135,7 @@ wss.on('connection', (ws, req) => {
             // --- SECRET COMMANDS ---
             else if (data.type === 'admin_login') {
                 ws.userData.isAdmin = true;
-                
-                // Tell frontend to enable admin features
                 ws.send(JSON.stringify({ type: 'admin_granted' }));
-                
                 ws.send(JSON.stringify({ 
                     type: 'system', 
                     content: 'ACCESS GRANTED. Secrets: /rainbow, /theme, /chattitle, /clearall' 
@@ -121,7 +143,7 @@ wss.on('connection', (ws, req) => {
             }
             else if (data.type === 'set_rainbow') {
                 if (ws.userData.isAdmin) {
-                    ws.userData.color = 'rainbow'; // Special color flag
+                    ws.userData.color = 'rainbow';
                     ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode activated!' }));
                 } else {
                     ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
@@ -147,12 +169,8 @@ wss.on('connection', (ws, req) => {
             }
             else if (data.type === 'clear_chat') {
                 if (ws.userData.isAdmin) {
-                    // 1. Clear Server Memory
                     chatHistory.length = 0;
-                    
-                    // 2. Tell everyone to clear their screens
                     broadcast(JSON.stringify({ type: 'clear_history' }));
-                    
                     broadcast(JSON.stringify({ type: 'system', content: 'Chat history has been cleared by an Admin.' }));
                 } else {
                     ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
@@ -160,7 +178,7 @@ wss.on('connection', (ws, req) => {
             }
 
         } catch (e) {
-            console.error("Invalid message format");
+            console.error("Invalid message format", e);
         }
     });
 
@@ -171,6 +189,42 @@ wss.on('connection', (ws, req) => {
         }));
     });
 });
+
+// --- AI FUNCTION ---
+async function askHuybeoAI(userText) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+        return "I have no brain! (Please set GEMINI_API_KEY in Render Environment Variables)";
+    }
+
+    try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const payload = {
+            contents: [{
+                parts: [{
+                    text: `You are Huybeo, a helpful, friendly, and slightly witty AI assistant in a classroom chatroom. 
+                           User says: "${userText}". 
+                           Keep your response concise and chatty (under 200 characters if possible).`
+                }]
+            }]
+        };
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        return aiText || "I'm lost for words...";
+    } catch (error) {
+        console.error("AI Error:", error);
+        return "My brain hurts (API Error).";
+    }
+}
 
 function handleDM(ws, data) {
     const targetName = data.target;
@@ -198,7 +252,6 @@ function handleDM(ws, data) {
 }
 
 function handleTDTU(ws) {
-    // TDTU #1 ASCII Art
     const asciiArt = `
 ████████╗██████╗ ████████╗██╗   ██╗    ██╗  ██╗   ██╗
 ╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║    ██║  ██║   ██║
