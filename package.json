@@ -1,7 +1,7 @@
 {
   "name": "render-ip-chat",
   "version": "1.0.0",
-  "description": "A simple chat app that shows IP and Port connections",
+  "description": "A chat for IP and Port connections",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
