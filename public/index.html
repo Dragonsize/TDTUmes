@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TDTU messenger </title>
     <style>
-        /* --- CSS VARIABLES & THEMES --- */
+        /* CSS VARIABLES */
         :root {
             --bg-color: #1a1a1a;
             --panel-bg: #000;
             --text-color: #ccc;
-            --accent-color: #00ff00; /* Default Neon Green */
+            --accent-color: #00ff00; /* default green */
             --header-bg: #2a2a2a;
             --input-bg: #222;
             --border-color: #333;
@@ -21,7 +21,7 @@
             --bg-color: #12001a;
             --panel-bg: #08000c;
             --text-color: #c48eff;
-            --accent-color: #9d00ff; /* True Electric Purple */
+            --accent-color: #9d00ff; /* purple */
             --header-bg: #1f002b;
             --input-bg: #16001f;
             --border-color: #58008c;
@@ -31,7 +31,7 @@
             --bg-color: #051020;
             --panel-bg: #000510;
             --text-color: #b0e0ff;
-            --accent-color: #0088ff; /* Neon Blue */
+            --accent-color: #0088ff; /*blue */
             --header-bg: #001a36;
             --input-bg: #001225;
             --border-color: #003360;
@@ -42,13 +42,13 @@
             --bg-color: #1a0505;
             --panel-bg: #0a0000;
             --text-color: #ffb0b0;
-            --accent-color: #ff0000; /* Neon Red */
+            --accent-color: #ff0000; /*red */
             --header-bg: #360000;
             --input-bg: #250000;
             --border-color: #600000;
         }
 
-        /* Rainbow Animation */
+        /* Rainbow */
         @keyframes rainbow-anim {
             0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
             14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
@@ -65,7 +65,7 @@
             font-weight: bold;
         }
 
-        /* --- LAYOUT --- */
+        /* LAYOUT */
         body { 
             font-family: 'Courier New', Courier, monospace; 
             background: var(--bg-color);
@@ -154,7 +154,7 @@
             width: 100%;
         }
 
-        /* Make font tiny on mobile specifically for ASCII blocks */
+        /* Make font tiny on mobile for ASCII blocks */
         @media (max-width: 600px) {
             .ascii-art {
                 font-size: 10px; 
@@ -210,7 +210,7 @@
     </div>
 
     <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message..." autofocus>
+        <input type="text" id="messageInput" placeholder="Type a message... /? for cmds" autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -340,7 +340,7 @@
             messageInput.value = '';
         }
 
-        // --- TAB AUTOCOMPLETE ---
+        // AUTOCOMPLETE 
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Tab') {
                 e.preventDefault(); 
@@ -407,7 +407,7 @@
                 
                 const textSpan = document.createElement('span');
                 
-                // --- ASCII DETECTION FIX ---
+                // DETECTION FIX 
                 // If text looks like a block, use the ASCII fix class
                 if (text.includes('█')) {
                     textSpan.className = 'ascii-art';
