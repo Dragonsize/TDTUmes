@@ -7,14 +7,14 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Serve static files from the 'public' folder
+// serve static files from'public' folder
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Store last 50 message
+// store last 50 message
 const chatHistory = [];
 const HISTORY_LIMIT = 50;
 
-// Store global state
+// store global state
 let currentTheme = 'default';
 let currentTitle = "Classroom"; 
 
@@ -27,7 +27,7 @@ wss.on('connection', (ws, req) => {
     
     const port = req.socket.remotePort;
 
-    // 2. Initialize User State
+    //  initialize user state
     ws.userData = {
         username: `${port}`,
         color: getRandomColor(),
@@ -37,7 +37,7 @@ wss.on('connection', (ws, req) => {
 
     console.log(`Connection from ${ip}:${port}`);
 
-    // 3. Send Initial Data
+    // initial data
     ws.send(JSON.stringify({ type: 'history', content: chatHistory }));
     ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
     ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
@@ -58,7 +58,7 @@ wss.on('connection', (ws, req) => {
             const data = JSON.parse(message);
 
             if (data.type === 'message') {
-                // 1. Process User Message
+                // process message
                 const msgContent = data.content;
                 const msgObject = {
                     type: 'message',
@@ -73,17 +73,17 @@ wss.on('connection', (ws, req) => {
 
                 broadcast(JSON.stringify(msgObject));
 
-                // 2. CHECK FOR AI TRIGGER ("Hey Huybeo")
+                // AI TRIGGER ("Hey Huybeo")
                 const lowerMsg = msgContent.toLowerCase().trim();
                 if (lowerMsg.startsWith("hey huybeo")) {
-                    // Extract the question (remove "hey huybeo" from start)
+                    // Extract the question 
                     const prompt = msgContent.substring(10).trim();
                     
                     if (prompt.length > 0) {
-                        // Call AI
+                        // call AI
                         const aiResponse = await askHuybeoAI(prompt);
                         
-                        // Broadcast AI Response
+                        // broadcast  response
                         const aiMsgObject = {
                             type: 'message',
                             username: "Huybeo (AI)",
@@ -97,7 +97,7 @@ wss.on('connection', (ws, req) => {
                         
                         broadcast(JSON.stringify(aiMsgObject));
                     } else {
-                        // User said "Hey Huybeo" but nothing else
+                        //  "Hey Huybeo" but nothing else
                         const aiMsgObject = {
                             type: 'message',
                             username: "Huybeo (AI)",
@@ -132,7 +132,7 @@ wss.on('connection', (ws, req) => {
             else if (data.type === 'tdtu') {
                 handleTDTU(ws);
             }
-            // --- SECRET COMMANDS ---
+            // SECRET COMMANDS
             else if (data.type === 'admin_login') {
                 ws.userData.isAdmin = true;
                 ws.send(JSON.stringify({ type: 'admin_granted' }));
@@ -146,7 +146,7 @@ wss.on('connection', (ws, req) => {
                     ws.userData.color = 'rainbow';
                     ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode activated!' }));
                 } else {
-                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied.' }));
                 }
             }
             else if (data.type === 'change_theme') {
@@ -155,7 +155,7 @@ wss.on('connection', (ws, req) => {
                     broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
                     broadcast(JSON.stringify({ type: 'system', content: `Global theme changed to ${currentTheme}` }));
                 } else {
-                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied.' }));
                 }
             }
             else if (data.type === 'change_title') {
@@ -164,7 +164,7 @@ wss.on('connection', (ws, req) => {
                     broadcast(JSON.stringify({ type: 'title', title: currentTitle }));
                     broadcast(JSON.stringify({ type: 'system', content: `Room title changed to: ${currentTitle}` }));
                 } else {
-                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied.' }));
                 }
             }
             else if (data.type === 'clear_chat') {
@@ -173,7 +173,7 @@ wss.on('connection', (ws, req) => {
                     broadcast(JSON.stringify({ type: 'clear_history' }));
                     broadcast(JSON.stringify({ type: 'system', content: 'Chat history has been cleared by an Admin.' }));
                 } else {
-                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied. Try /admin@' }));
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission Denied.' }));
                 }
             }
 
@@ -190,7 +190,7 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-// --- AI FUNCTION ---
+// AI FUNCTION 
 async function askHuybeoAI(userText) {
     const apiKey = process.env.GEMINI_API_KEY;
     
@@ -205,7 +205,8 @@ async function askHuybeoAI(userText) {
                 parts: [{
                     text: `You are Huybeo, a helpful, friendly, and slightly witty AI assistant in a classroom chatroom. 
                            User says: "${userText}". 
-                           Keep your response concise and chatty (under 200 characters if possible).`
+                           Keep your response concise and chatty (under 200 characters if possible). When ask for live data use google and search. 
+                           Avoid using placeholder like [] `
                 }]
             }]
         };
