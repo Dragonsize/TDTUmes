@@ -1,4 +1,4 @@
-#TDTU Messenger (Port Chat)
+TDTU Messenger (Port Chat)
 
 A real-time, WebSocket-based chat application built with Node.js. This application assigns users a unique identity based on their connection port and allows for public messaging, private DMs, and customizable themes. Including an integrated AI assistant named tdtuAI.
 
