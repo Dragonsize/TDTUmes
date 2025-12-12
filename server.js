@@ -73,20 +73,20 @@ wss.on('connection', (ws, req) => {
 
                 broadcast(JSON.stringify(msgObject));
 
-                // AI TRIGGER ("Hey Huybeo")
+                // AI TRIGGER ("Hey tdtuAI")
                 const lowerMsg = msgContent.toLowerCase().trim();
-                if (lowerMsg.startsWith("hey huybeo")) {
+                if (lowerMsg.startsWith("hey tdtuAI")) {
                     // Extract the question 
                     const prompt = msgContent.substring(10).trim();
                     
                     if (prompt.length > 0) {
                         // call AI
-                        const aiResponse = await askHuybeoAI(prompt);
+                        const aiResponse = await asktdtuAIAI(prompt);
                         
                         // broadcast  response
                         const aiMsgObject = {
                             type: 'message',
-                            username: "Huybeo (AI)",
+                            username: "tdtuAI (AI)",
                             color: "#00ccff", // Cyan color for AI
                             content: aiResponse,
                             timestamp: Date.now()
@@ -97,10 +97,10 @@ wss.on('connection', (ws, req) => {
                         
                         broadcast(JSON.stringify(aiMsgObject));
                     } else {
-                        //  "Hey Huybeo" but nothing else
+                        //  "Hey tdtuAI" but nothing else
                         const aiMsgObject = {
                             type: 'message',
-                            username: "Huybeo (AI)",
+                            username: "tdtuAI (AI)",
                             color: "#00ccff",
                             content: "Yes? How can I help you?",
                             timestamp: Date.now()
@@ -191,7 +191,7 @@ wss.on('connection', (ws, req) => {
 });
 
 // AI FUNCTION 
-async function askHuybeoAI(userText) {
+async function asktdtuAIAI(userText) {
     const apiKey = process.env.GEMINI_API_KEY;
     
     if (!apiKey) {
@@ -203,7 +203,7 @@ async function askHuybeoAI(userText) {
         const payload = {
             contents: [{
                 parts: [{
-                    text: `You are Huybeo, a helpful, friendly, and slightly witty AI assistant in a classroom chatroom. 
+                    text: `You are tdtuAI, a helpful, friendly, and slightly witty AI assistant in a classroom chatroom. 
                            User says: "${userText}". 
                            Keep your response concise and chatty (under 200 characters if possible). When ask for live data use google and search. 
                            Avoid using placeholder like [] `
