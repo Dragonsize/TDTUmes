@@ -1,14 +1,15 @@
 {
   "name": "render-ip-chat",
   "version": "1.0.0",
-  "description": "A chat for IP and Port connections",
+  "description": "A chat for IP and Port connections with Neon Database",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "ws": "^8.13.0"
+    "ws": "^8.13.0",
+    "pg": "^8.11.0" 
   },
   "engines": {
     "node": ">=16.0.0"
