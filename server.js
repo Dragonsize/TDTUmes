@@ -8,24 +8,42 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// 1. NEON DATABASE CONNECTION
+// 1. NEON DATABASE SETUP
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
+// Test DB Connection on Startup
+pool.connect((err, client, release) => {
+    if (err) return console.error('Error acquiring client', err.stack);
+    console.log('Successfully connected to Neon Database');
+    release();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-const HISTORY_LIMIT = 50;
+// GLOBAL STATE (Stored in memory, reset on server sleep)
 let currentTheme = 'default';
-let currentTitle = "Classroom"; 
+let currentTitle = "Classroom";
+const HISTORY_LIMIT = 50;
 
 wss.on('connection', async (ws, req) => {
+    // GET CLIENT IP
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     if (ip && ip.indexOf(',') > -1) ip = ip.split(',')[0];
+    
     const port = req.socket.remotePort;
 
-    ws.userData = { username: `${port}`, color: getRandomColor(), ip: ip, isAdmin: false };
+    // INITIALIZE USER STATE
+    ws.userData = {
+        username: `Guest_${port}`,
+        color: getRandomColor(),
+        ip: ip,
+        isAdmin: false
+    };
+
+    console.log(`User connected: ${ip}:${port}`);
 
     // 2. FETCH HISTORY FROM NEON
     try {
@@ -35,69 +53,128 @@ wss.on('connection', async (ws, req) => {
         );
         ws.send(JSON.stringify({ type: 'history', content: res.rows }));
     } catch (err) {
-        console.error("DB History Error:", err);
+        console.error("Database Fetch Error:", err);
     }
 
+    // SEND INITIAL STATE
     ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
     ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
-    ws.send(JSON.stringify({ type: 'init', username: ws.userData.username, color: ws.userData.color }));
+    ws.send(JSON.stringify({ type: 'init', username: ws.userData.username }));
 
-    broadcast(JSON.stringify({ type: 'system', content: `User ${ws.userData.username} joined.` }));
+    broadcast(JSON.stringify({
+        type: 'system',
+        content: `User ${ws.userData.username} joined the chat.`
+    }));
 
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
 
+            // --- COMMAND LOGIC ---
+            if (data.type === 'message' && data.content.startsWith('/')) {
+                const parts = data.content.split(' ');
+                const cmd = parts[0].toLowerCase();
+
+                if (cmd === '/ping') {
+                    ws.send(JSON.stringify({ type: 'pong', startTime: Date.now() }));
+                    return;
+                }
+
+                if (cmd === '/m') {
+                    handleDM(ws, { target: parts[1], content: parts.slice(2).join(' ') });
+                    return;
+                }
+
+                if (cmd === '/tdtu') {
+                    const art = `\n████████╗██████╗ \n╚══██╔══╝██╔══██╗\n   ██║   ██║  ██║\n   ██║   ██████╔╝\n   ╚═╝   ╚═════╝ `;
+                    await saveAndBroadcast(ws.userData.username, ws.userData.color, art);
+                    return;
+                }
+
+                // ADMIN COMMANDS
+                if (cmd === '/admin@') { // Your secret admin trigger
+                    ws.userData.isAdmin = true;
+                    ws.send(JSON.stringify({ type: 'admin_granted' }));
+                    return;
+                }
+
+                if (ws.userData.isAdmin) {
+                    if (cmd === '/rainbow') {
+                        ws.userData.color = 'rainbow';
+                        ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode active!' }));
+                    } else if (cmd === '/theme') {
+                        currentTheme = parts[1] || 'default';
+                        broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
+                    } else if (cmd === '/chattitle') {
+                        currentTitle = parts.slice(1).join(' ');
+                        broadcast(JSON.stringify({ type: 'title', title: currentTitle }));
+                    } else if (cmd === '/clearall') {
+                        await pool.query('DELETE FROM chat_messages');
+                        broadcast(JSON.stringify({ type: 'clear_history' }));
+                        broadcast(JSON.stringify({ type: 'system', content: 'Chat history wiped by Admin.' }));
+                    }
+                } else {
+                    ws.send(JSON.stringify({ type: 'system', content: 'Permission denied.' }));
+                }
+                return;
+            }
+
+            // --- NORMAL MESSAGE LOGIC ---
             if (data.type === 'message') {
-                const msgObject = {
-                    username: ws.userData.username,
-                    color: ws.userData.color,
-                    content: data.content,
-                    timestamp: Date.now()
-                };
-
-                // 3. SAVE MESSAGE TO NEON
-                await pool.query(
-                    'INSERT INTO chat_messages (username, color, content, timestamp) VALUES ($1, $2, $3, $4)',
-                    [msgObject.username, msgObject.color, msgObject.content, msgObject.timestamp]
-                );
-
-                broadcast(JSON.stringify({ type: 'message', ...msgObject }));
+                await saveAndBroadcast(ws.userData.username, ws.userData.color, data.content);
 
                 // AI TRIGGER
-                if (data.content.toLowerCase().startsWith("hey tdtuai")) {
+                const lowerMsg = data.content.toLowerCase().trim();
+                if (lowerMsg.startsWith("hey tdtuai")) {
                     const prompt = data.content.substring(10).trim();
-                    const aiResponse = await asktdtuAIAI(prompt);
-                    const aiMsg = { username: "tdtuAI (AI)", color: "#00ccff", content: aiResponse, timestamp: Date.now() };
-                    
-                    await pool.query(
-                        'INSERT INTO chat_messages (username, color, content, timestamp) VALUES ($1, $2, $3, $4)',
-                        [aiMsg.username, aiMsg.color, aiMsg.content, aiMsg.timestamp]
-                    );
-                    broadcast(JSON.stringify({ type: 'message', ...aiMsg }));
+                    const aiResponse = await askAI(prompt || "Hello!");
+                    await saveAndBroadcast("tdtuAI (AI)", "#00ccff", aiResponse);
                 }
             } 
-            else if (data.type === 'clear_chat' && ws.userData.isAdmin) {
-                // 4. PERMANENT WIPE
-                await pool.query('DELETE FROM chat_messages');
-                broadcast(JSON.stringify({ type: 'clear_history' }));
-                broadcast(JSON.stringify({ type: 'system', content: 'History cleared by Admin.' }));
+            
+            // --- PROFILE UPDATES ---
+            else if (data.type === 'update_name') {
+                const oldName = ws.userData.username;
+                ws.userData.username = data.content.trim().substring(0, 15) || oldName;
+                broadcast(JSON.stringify({ type: 'system', content: `${oldName} changed name to ${ws.userData.username}` }));
             }
-            else if (data.type === 'tdtu') {
-                handleTDTU(ws);
+            else if (data.type === 'update_color') {
+                ws.userData.color = data.content;
             }
-            else if (data.type === 'admin_login') {
-                ws.userData.isAdmin = true;
-                ws.send(JSON.stringify({ type: 'admin_granted' }));
-            }
-            // Add your other handlers (update_name, ping, etc.) here...
-        } catch (e) { console.error("Msg Error:", e); }
+
+        } catch (e) { console.error("Message Error:", e); }
+    });
+
+    ws.on('close', () => {
+        broadcast(JSON.stringify({ type: 'system', content: `User ${ws.userData.username} disconnected.` }));
     });
 });
 
-async function asktdtuAIAI(userText) {
+// HELPERS
+async function saveAndBroadcast(user, color, content) {
+    const timestamp = Date.now();
+    try {
+        await pool.query(
+            'INSERT INTO chat_messages (username, color, content, timestamp) VALUES ($1, $2, $3, $4)',
+            [user, color, content, timestamp]
+        );
+        broadcast(JSON.stringify({ type: 'message', username: user, color: color, content: content }));
+    } catch (e) { console.error("Save Error:", e); }
+}
+
+function handleDM(ws, data) {
+    wss.clients.forEach((client) => {
+        if (client.userData.username === data.target) {
+            const dm = JSON.stringify({ type: 'dm', from: ws.userData.username, to: data.target, content: data.content, color: ws.userData.color });
+            client.send(dm);
+            ws.send(dm);
+        }
+    });
+}
+
+async function askAI(userText) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return "API Key missing!";
+    if (!apiKey) return "API key missing in Render variables.";
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
@@ -106,21 +183,19 @@ async function asktdtuAIAI(userText) {
             body: JSON.stringify({ contents: [{ parts: [{ text: userText }] }] })
         });
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || "No response.";
-    } catch (e) { return "AI Error."; }
-}
-
-async function handleTDTU(ws) {
-    const art = "████████╗██████╗ ████████╗██╗   ██╗\n╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║\n   ██║   ██║  ██║   ██║   ██║   ██║\n   ██║   ██████╔╝   ██║   ╚██████╔╝";
-    const msg = { username: ws.userData.username, color: ws.userData.color, content: art, timestamp: Date.now() };
-    await pool.query('INSERT INTO chat_messages (username, color, content, timestamp) VALUES ($1, $2, $3, $4)', [msg.username, msg.color, msg.content, msg.timestamp]);
-    broadcast(JSON.stringify({ type: 'message', ...msg }));
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm lost for words...";
+    } catch (e) { return "AI connection error."; }
 }
 
 function broadcast(data) {
-    wss.clients.forEach(c => { if (c.readyState === WebSocket.OPEN) c.send(data); });
+    wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) client.send(data);
+    });
 }
 
-function getRandomColor() { return `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`; }
+function getRandomColor() {
+    return `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`;
+}
 
-server.listen(process.env.PORT || 3000, () => console.log(`Server started`));
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
