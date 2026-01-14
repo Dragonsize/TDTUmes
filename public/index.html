@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TDTU messenger </title>
+    <title>TDTU Messenger</title>
     <style>
         /* CSS VARIABLES */
         :root {
@@ -21,17 +21,18 @@
             --bg-color: #12001a;
             --panel-bg: #08000c;
             --text-color: #c48eff;
-            --accent-color: #9d00ff; /* purple */
+            --accent-color: #9d00ff;
             --header-bg: #1f002b;
             --input-bg: #16001f;
             --border-color: #58008c;
         }
 
+        /* Deep Sea Blue Theme */
         body.theme-blue {
             --bg-color: #051020;
             --panel-bg: #000510;
             --text-color: #b0e0ff;
-            --accent-color: #0088ff; /*blue */
+            --accent-color: #0088ff;
             --header-bg: #001a36;
             --input-bg: #001225;
             --border-color: #003360;
@@ -42,13 +43,13 @@
             --bg-color: #1a0505;
             --panel-bg: #0a0000;
             --text-color: #ffb0b0;
-            --accent-color: #ff0000; /*red */
+            --accent-color: #ff0000;
             --header-bg: #360000;
             --input-bg: #250000;
             --border-color: #600000;
         }
 
-        /* Rainbow */
+        /* Rainbow Animation */
         @keyframes rainbow-anim {
             0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
             14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
@@ -65,7 +66,7 @@
             font-weight: bold;
         }
 
-        /* LAYOUT */
+        /* LAYOUT & UI */
         body { 
             font-family: 'Courier New', Courier, monospace; 
             background: var(--bg-color);
@@ -77,6 +78,13 @@
             height: 100vh; 
             box-sizing: border-box; 
             transition: background 0.5s, color 0.5s;
+        }
+
+        /* LOGIN SCREEN OVERLAY */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color); z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
         }
         
         header {
@@ -146,20 +154,15 @@
         .dm-msg { color: #ff00ff; }
         .username-tag { font-weight: bold; }
 
-        /* ASCII Art Mobile Fix */
         .ascii-art {
             display: block;
-            white-space: pre; /* Don't wrap lines */
-            overflow-x: auto; /* Scroll if too wide */
+            white-space: pre;
+            overflow-x: auto;
             width: 100%;
         }
 
-        /* Make font tiny on mobile for ASCII blocks */
         @media (max-width: 600px) {
-            .ascii-art {
-                font-size: 10px; 
-                line-height: 10px;
-            }
+            .ascii-art { font-size: 10px; line-height: 10px; }
         }
         
         #input-area { display: flex; gap: 10px; }
@@ -187,27 +190,32 @@
 </head>
 <body>
 
+    <div id="login-overlay">
+        <h1 style="color:var(--accent-color); text-shadow: 0 0 10px var(--accent-color); margin-bottom: 30px;">TDTU MESSENGER</h1>
+        <div class="setting-group" style="padding: 15px;">
+            <input type="text" id="loginUsername" placeholder="Pick a username..." style="font-size: 1.5em; width: 250px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none;">
+        </div>
+        <button onclick="enterChat()" style="margin-top: 20px; width: 280px; font-size: 1.1em;">CONNECT TO SERVER</button>
+    </div>
+
     <header>
         <div class="setting-group">
             <label>NAME:</label>
-            <input type="text" id="usernameInput" class="settings-input" placeholder="Loading...">
+            <input type="text" id="usernameInput" class="settings-input" placeholder="Guest">
         </div>
         <div class="setting-group">
             <label>COLOR:</label>
             <input type="color" id="colorInput" value="#00ff00">
         </div>
         
-        <!-- CENTER TITLE -->
         <div id="chatTitle">Classroom</div>
 
         <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
-            STATUS: <span id="status">Disconnected</span>
+            STATUS: <span id="status">Connecting...</span>
         </div>
     </header>
 
-    <div id="chat-container">
-        <div class="message system">Connecting to server...</div>
-    </div>
+    <div id="chat-container"></div>
 
     <div id="input-area">
         <input type="text" id="messageInput" placeholder="Type a message... /? for cmds" autofocus>
@@ -238,100 +246,56 @@
             
             if (data.type === 'init') {
                 usernameInput.value = data.username;
-                colorInput.value = convertToHex(data.color);
             } else if (data.type === 'system') {
                 addMessage('system', data.content);
             } else if (data.type === 'message') {
                 addMessage('user', data.content, data.username, data.color);
             } else if (data.type === 'history') {
+                // CLEAR AND LOAD FROM NEON DATABASE
+                chatContainer.innerHTML = '';
                 data.content.forEach(msg => addMessage('user', msg.content, msg.username, msg.color));
-                addMessage('system', '--- Chat History Loaded ---');
+                addMessage('system', '--- Chat History Restored from Database ---');
             } else if (data.type === 'dm') {
                 const prefix = `[DM] ${data.from} -> ${data.to}`;
                 addMessage('dm', data.content, prefix, data.color);
             } else if (data.type === 'pong') {
                 const latency = Date.now() - data.startTime;
                 addMessage('system', `Pong! Latency: ${latency}ms`);
-            } 
-            else if (data.type === 'theme') {
+            } else if (data.type === 'theme') {
                 applyTheme(data.theme);
-            }
-            else if (data.type === 'title') {
+            } else if (data.type === 'title') {
                 chatTitle.textContent = data.title;
-            }
-            else if (data.type === 'clear_history') {
+            } else if (data.type === 'clear_history') {
                 chatContainer.innerHTML = '';
-            }
-            else if (data.type === 'admin_granted') {
+            } else if (data.type === 'admin_granted') {
                 isAdmin = true;
                 addMessage('system', '>> Admin Privileges Unlocked <<');
-                addMessage('system', 'Secrets Unlocked: /rainbow, /theme, /chattitle, /clearall');
             }
         };
 
         ws.onclose = () => {
             statusSpan.textContent = "Disconnected";
             statusSpan.style.color = "red";
-            addMessage('system', 'Disconnected from server.');
+            addMessage('system', 'Connection lost. Please refresh.');
         };
+
+        function enterChat() {
+            const name = document.getElementById('loginUsername').value.trim();
+            if (name) {
+                usernameInput.value = name;
+                updateName();
+                document.getElementById('login-overlay').style.display = 'none';
+            }
+        }
 
         function sendMessage() {
             const text = messageInput.value.trim();
             if (!text) return;
 
-            if (text.startsWith('/')) {
-                const parts = text.split(' ');
-                const cmd = parts[0].toLowerCase();
-                
-                if (cmd === '/cls') {
-                    chatContainer.innerHTML = '';
-                    addMessage('system', 'Chat cleared locally.');
-                } 
-                else if (cmd === '/?') {
-                    addMessage('system', 'COMMANDS:\n/m <user> <msg> - Private Message\n/tdtu - TDTU Art\n/ping - Check latency\n/cls - Clear screen\n/? - Show help');
-                }
-                else if (cmd === '/ping') {
-                    ws.send(JSON.stringify({ type: 'ping', startTime: Date.now() }));
-                }
-                else if (cmd === '/m') {
-                    if (parts.length < 3) addMessage('system', 'Usage: /m <username> <message>');
-                    else {
-                        ws.send(JSON.stringify({
-                            type: 'dm',
-                            target: parts[1],
-                            content: parts.slice(2).join(' ')
-                        }));
-                    }
-                }
-                else if (cmd === '/tdtu') {
-                    ws.send(JSON.stringify({ type: 'tdtu' }));
-                }
-                // --- SECRET COMMANDS ---
-                else if (cmd === '/admin@') {
-                    ws.send(JSON.stringify({ type: 'admin_login' }));
-                }
-                else if (cmd === '/rainbow') {
-                    ws.send(JSON.stringify({ type: 'set_rainbow' }));
-                }
-                else if (cmd === '/theme') {
-                    if (parts.length < 2) addMessage('system', 'Usage: /theme <red|purple|blue|default>');
-                    else {
-                        ws.send(JSON.stringify({ type: 'change_theme', theme: parts[1].toLowerCase() }));
-                    }
-                }
-                else if (cmd === '/chattitle') {
-                    if (parts.length < 2) addMessage('system', 'Usage: /chattitle <New Title>');
-                    else {
-                        ws.send(JSON.stringify({ type: 'change_title', title: parts.slice(1).join(' ') }));
-                    }
-                }
-                else if (cmd === '/clearall') {
-                    ws.send(JSON.stringify({ type: 'clear_chat' }));
-                }
-                else {
-                    addMessage('system', 'Unknown command. Type /? for help.');
-                }
-                
+            // Handle Local-only UI commands
+            if (text.toLowerCase() === '/cls') {
+                chatContainer.innerHTML = '';
+                addMessage('system', 'Local chat cleared.');
                 messageInput.value = '';
                 return;
             }
@@ -340,52 +304,28 @@
             messageInput.value = '';
         }
 
-        // AUTOCOMPLETE 
+        // AUTOCOMPLETE (TAB KEY)
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Tab') {
                 e.preventDefault(); 
-                
                 const val = messageInput.value;
                 const publicCmds = ['/m ', '/tdtu', '/ping', '/cls', '/?'];
                 const adminCmds = ['/rainbow', '/theme ', '/chattitle ', '/clearall'];
-                
-                let availableCmds = publicCmds;
-                if (isAdmin) {
-                    availableCmds = [...publicCmds, ...adminCmds];
-                }
+                let availableCmds = isAdmin ? [...publicCmds, ...adminCmds] : publicCmds;
                 
                 if (val.startsWith('/')) {
                     const matches = availableCmds.filter(c => c.startsWith(val));
                     if (matches.length > 0) {
                         const exactMatchIndex = matches.indexOf(val);
-                        if (exactMatchIndex !== -1) {
-                            const nextIndex = (exactMatchIndex + 1) % matches.length;
-                            messageInput.value = matches[nextIndex];
-                        } else {
-                            messageInput.value = matches[0];
-                        }
+                        const nextIndex = (exactMatchIndex + 1) % matches.length;
+                        messageInput.value = matches[nextIndex];
                     }
                 }
             }
         });
 
-        function updateName() {
-            const newName = usernameInput.value;
-            if (newName) ws.send(JSON.stringify({ type: 'update_name', content: newName }));
-        }
-
-        function updateColor() {
-            ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
-        }
-
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-        usernameInput.addEventListener('change', updateName);
-        usernameInput.addEventListener('blur', updateName);
-        colorInput.addEventListener('change', updateColor);
-
         function addMessage(type, text, username = null, color = null) {
             const div = document.createElement('div');
-            
             let msgClass = 'user-msg';
             if (type === 'system') msgClass = 'system';
             if (type === 'dm') msgClass = 'dm-msg';
@@ -396,23 +336,17 @@
             if (username) {
                 const nameSpan = document.createElement('span');
                 nameSpan.className = 'username-tag';
-                
                 if (color === 'rainbow') {
                     nameSpan.classList.add('rainbow-text');
                 } else {
                     nameSpan.style.color = color || 'var(--text-color)';
                 }
-                
                 nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
                 
                 const textSpan = document.createElement('span');
-                
-                // DETECTION FIX 
-                // If text looks like a block, use the ASCII fix class
                 if (text.includes('█')) {
                     textSpan.className = 'ascii-art';
                 }
-                
                 textSpan.textContent = text;
                 
                 div.appendChild(nameSpan);
@@ -427,10 +361,17 @@
 
         function applyTheme(themeName) {
             document.body.className = ''; 
-            if (themeName === 'purple') document.body.classList.add('theme-purple');
-            if (themeName === 'blue') document.body.classList.add('theme-blue');
-            if (themeName === 'red') document.body.classList.add('theme-red');
+            if (['purple', 'blue', 'red'].includes(themeName)) {
+                document.body.classList.add('theme-' + themeName);
+            }
         }
+
+        function updateName() { ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value })); }
+        function updateColor() { ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value })); }
+
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        usernameInput.addEventListener('change', updateName);
+        colorInput.addEventListener('change', updateColor);
 
         function convertToHex(colorStr) {
             if(colorStr && colorStr.startsWith('#')) return colorStr;
@@ -439,7 +380,3 @@
     </script>
 </body>
 </html>
-
-
-
-            
