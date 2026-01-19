@@ -31,12 +31,10 @@ let currentTheme = 'default';
 let currentTitle = 'Classroom';
 
 wss.on('connection', async (ws, req) => {
-    // Get client IP
     let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     if (ip && ip.includes(',')) ip = ip.split(',')[0].trim();
     const port = req.socket.remotePort;
 
-    // Initialize user data
     ws.userData = {
         username: `Guest_${port}`,
         color: getRandomColor(),
@@ -46,10 +44,10 @@ wss.on('connection', async (ws, req) => {
 
     console.log(`Connection from ${ip}:${port}`);
 
-    // Send chat history from DB
+    // Send current chat history
     try {
         const res = await pool.query(
-            'SELECT username, color, content, timestamp FROM chat_messages ORDER BY timestamp ASC LIMIT $1',
+            'SELECT username, content, timestamp FROM current_chat ORDER BY timestamp ASC LIMIT $1',
             [HISTORY_LIMIT]
         );
         ws.send(JSON.stringify({ type: 'history', content: res.rows }));
@@ -79,13 +77,11 @@ wss.on('connection', async (ws, req) => {
             if (data.type === 'message') {
                 const content = data.content.trim();
                 
-                // Handle slash commands first
                 if (content.startsWith('/')) {
                     await handleCommand(ws, content);
                     return;
                 }
 
-                // Save and broadcast normal message
                 await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
 
                 // AI trigger
@@ -113,14 +109,12 @@ wss.on('connection', async (ws, req) => {
                 handleDM(ws, data);
             } else if (data.type === 'tdtu') {
                 handleTDTU(ws);
-            }
-            // Admin secret commands (JSON-based)
-            else if (data.type === 'admin_login') {
+            } else if (data.type === 'admin_login') {
                 ws.userData.isAdmin = true;
                 ws.send(JSON.stringify({ type: 'admin_granted' }));
                 ws.send(JSON.stringify({
                     type: 'system',
-                    content: 'ACCESS GRANTED. Slash commands: /rainbow, /theme <name>, /chattitle <title>, /clearall'
+                    content: 'ADMIN: /rainbow, /theme <name>, /chattitle <title>, /clearall, /viewdatabase, /archiveprune'
                 }));
             }
         } catch (e) {
@@ -136,7 +130,6 @@ wss.on('connection', async (ws, req) => {
     });
 });
 
-// Handle slash commands
 async function handleCommand(ws, content) {
     const parts = content.split(' ');
     const cmd = parts[0].toLowerCase();
@@ -156,10 +149,13 @@ async function handleCommand(ws, content) {
         return;
     }
 
-    // Admin commands
     if (cmd === '/admin@') {
         ws.userData.isAdmin = true;
         ws.send(JSON.stringify({ type: 'admin_granted' }));
+        ws.send(JSON.stringify({
+            type: 'system',
+            content: 'ADMIN: /rainbow, /theme <name>, /chattitle <title>, /clearall, /viewdatabase, /archiveprune'
+        }));
         return;
     }
 
@@ -184,61 +180,117 @@ async function handleCommand(ws, content) {
             broadcast(JSON.stringify({ type: 'system', content: `Title changed to: ${currentTitle}` }));
             break;
         case '/clearall':
-            await pool.query('DELETE FROM chat_messages');
-            broadcast(JSON.stringify({ type: 'clear_history' }));
-            broadcast(JSON.stringify({ type: 'system', content: 'Chat history cleared by Admin.' }));
+            try {
+                // Move last 100 to archive
+                const currentRes = await pool.query('SELECT * FROM current_chat ORDER BY id DESC LIMIT 100');
+                for (const row of currentRes.rows) {
+                    await pool.query(
+                        'INSERT INTO history_archive (username, content, timestamp) VALUES ($1, $2, $3)',
+                        [row.username, row.content, row.timestamp]
+                    );
+                }
+                // Keep only newest 500 in archive
+                await pool.query(`
+                    DELETE FROM history_archive 
+                    WHERE id NOT IN (
+                        SELECT id FROM (
+                            SELECT id FROM history_archive ORDER BY id DESC LIMIT 500
+                        ) AS top500
+                    )
+                `);
+                await pool.query('DELETE FROM current_chat');
+                broadcast(JSON.stringify({ type: 'clear_history' }));
+                broadcast(JSON.stringify({ type: 'system', content: 'Chat cleared. History archived.' }));
+            } catch (err) {
+                console.error('Clear error:', err);
+                ws.send(JSON.stringify({ type: 'system', content: 'Clear failed.' }));
+            }
+            break;
+        case '/viewdatabase':
+            try {
+                const res = await pool.query(
+                    'SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 50'
+                );
+                const tableView = res.rows.map(row => 
+                    `${row.id.padStart(3)} | ${row.username.padEnd(12)} | ${row.content.substring(0,40).padEnd(40)} | ${new Date(row.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`
+                ).join('\n') || 'Database empty';
+                
+                ws.send(JSON.stringify({ 
+                    type: 'system', 
+                    content: `📊 CURRENT CHAT DATABASE (50 newest):\n\`\`\`\n${tableView}\n\`\`\`\nTotal: ${res.rowCount} messages`
+                }));
+            } catch (err) {
+                ws.send(JSON.stringify({ type: 'system', content: 'Database view error.' }));
+            }
+            break;
+        case '/archiveprune':
+            try {
+                const deleted = await pool.query(
+                    'DELETE FROM history_archive WHERE timestamp < NOW() - INTERVAL \'7 days\' RETURNING id'
+                );
+                ws.send(JSON.stringify({ type: 'system', content: `Archive pruned: ${deleted.rowCount} old messages removed.` }));
+            } catch (err) {
+                ws.send(JSON.stringify({ type: 'system', content: 'Prune error.' }));
+            }
             break;
         default:
-            ws.send(JSON.stringify({ type: 'system', content: 'Unknown command.' }));
+            ws.send(JSON.stringify({ type: 'system', content: 'Unknown admin command.' }));
     }
 }
 
-// Save message to DB and broadcast
 async function saveAndBroadcast(username, color, content) {
-    const timestamp = Date.now();
+    const timestamp = new Date().toISOString();
     const msg = { type: 'message', username, color, content, timestamp };
     
     try {
         await pool.query(
-            'INSERT INTO chat_messages (username, color, content, timestamp) VALUES ($1, $2, $3, $4)',
-            [username, color, content, timestamp]
+            'INSERT INTO current_chat (username, content, timestamp) VALUES ($1, $2, $3)',
+            [username, content, timestamp]
         );
+        
+        // Archive management (keep 500 newest)
+        await pool.query(`
+            DELETE FROM history_archive 
+            WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id FROM history_archive ORDER BY id DESC LIMIT 500
+                ) AS top500
+            )
+        `);
+        await pool.query(
+            'INSERT INTO history_archive (username, content, timestamp) VALUES ($1, $2, $3)',
+            [username, content, timestamp]
+        );
+        
         broadcast(JSON.stringify(msg));
     } catch (err) {
         console.error('DB save error:', err);
     }
 }
 
-// AI integration
 async function asktdtuAI(userText) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        return 'AI unavailable (set GEMINI_API_KEY env var).';
-    }
-
+    if (!apiKey) return 'AI unavailable (set GEMINI_API_KEY).';
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
         const payload = {
             contents: [{
                 parts: [{
-                    text: `You are tdtuAI, helpful & witty classroom chat AI. User: "${userText}". Keep responses concise (<200 chars), chatty. Use live search when needed. No placeholders.`
+                    text: `You are tdtuAI, helpful classroom chat AI. User: "${userText}". Keep responses concise (<200 chars), chatty.`
                 }]
             }]
         };
-
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-
         if (!response.ok) throw new Error(`API error: ${response.status}`);
-        
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "Hmm, not sure about that...";
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "Hmm, not sure...";
     } catch (error) {
         console.error('AI error:', error);
-        return 'AI brain freeze (check API key/network).';
+        return 'AI error (check API key).';
     }
 }
 
@@ -279,7 +331,6 @@ function handleTDTU(ws) {
    ██║   ██████╔╝   ██║   ╚██████╔╝
    ╚═╝   ╚═════╝    ╚═╝    ╚═════╝
          #1 UNIVERSITY`;
-    
     saveAndBroadcast(ws.userData.username, ws.userData.color, asciiArt);
 }
 
