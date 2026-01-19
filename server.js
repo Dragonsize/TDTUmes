@@ -3,7 +3,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const { Pool } = require('pg');
-const bcrypt = require('bcrypt'); // Added for secure passwords
+const bcrypt = require('bcrypt');
 
 const app = express();
 const server = http.createServer(app);
@@ -39,7 +39,7 @@ wss.on('connection', async (ws, req) => {
         color: getRandomColor(),
         ip,
         isAdmin: false,
-        isLoggedIn: false // Track authentication state
+        isLoggedIn: false
     };
 
     console.log(`👤 Connection from ${ip}:${port}`);
@@ -60,7 +60,8 @@ wss.on('connection', async (ws, req) => {
     ws.send(JSON.stringify({
         type: 'init',
         username: ws.userData.username,
-        color: ws.userData.color
+        color: ws.userData.color,
+        authenticated: ws.userData.isLoggedIn
     }));
 
     broadcast(JSON.stringify({
@@ -81,14 +82,8 @@ wss.on('connection', async (ws, req) => {
                 }
 
                 await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
-
-                const lowerMsg = content.toLowerCase();
-                if (lowerMsg.startsWith('hey tdtuai') || lowerMsg.startsWith('hey tdtuAI')) {
-                    const prompt = content.substring(10).trim() || 'Hello!';
-                    const aiResponse = await asktdtuAI(prompt);
-                    await saveAndBroadcast('tdtuAI (AI)', '#00ccff', aiResponse);
-                }
-            } else if (data.type === 'update_name') {
+            } 
+            else if (data.type === 'update_name') {
                 const oldName = ws.userData.username;
                 const newName = data.content.trim().substring(0, 20) || oldName;
                 if (newName !== oldName) {
@@ -98,11 +93,14 @@ wss.on('connection', async (ws, req) => {
                         content: `${oldName} is now known as ${newName}`
                     }));
                 }
-            } else if (data.type === 'update_color') {
+            } 
+            else if (data.type === 'update_color') {
                 ws.userData.color = data.content;
-            } else if (data.type === 'ping') {
+            } 
+            else if (data.type === 'ping') {
                 ws.send(JSON.stringify({ type: 'pong', startTime: data.startTime }));
-            } else if (data.type === 'dm') {
+            } 
+            else if (data.type === 'dm') {
                 handleDM(ws, data);
             }
         } catch (e) {
@@ -124,20 +122,22 @@ async function handleCommand(ws, content) {
     const args = parts.slice(1).join(' ');
 
     if (cmd === '/?') {
-        const publicCmds = '📋 PUBLIC: /register <u..> <p..> /login <u..> <p..> /note <text> /ping /m <user> <msg> /tdtu /cls\n🔐 ADMIN: /admin@ /rainbow /theme <name> /chattitle <title> /clearall /viewdatabase /archiveprune';
+        const publicCmds = '📋 PUBLIC: /register <user> <pass> /login <user> <pass> /note <text> /ping /m <user> <msg> /tdtu /cls\n🔐 ADMIN: /admin@ /rainbow /theme <name> /chattitle <title> /clearall /viewdatabase /archiveprune';
         ws.send(JSON.stringify({ type: 'system', content: publicCmds }));
         return;
     }
 
-    // --- ACCOUNT SYSTEM COMMANDS ---
+    // AUTH COMMANDS
     if (cmd === '/register') {
         const [regUser, regPass] = parts.slice(1);
         if (!regUser || !regPass) return ws.send(JSON.stringify({ type: 'system', content: '❌ Usage: /register <user> <pass>' }));
         try {
             const hash = await bcrypt.hash(regPass, 10);
             await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [regUser, hash]);
-            ws.send(JSON.stringify({ type: 'system', content: '✅ Account created! Use /login to sign in.' }));
-        } catch (e) { ws.send(JSON.stringify({ type: 'system', content: '❌ Username taken.' })); }
+            ws.send(JSON.stringify({ type: 'system', content: '✅ Account created! Use /login.' }));
+        } catch (e) { 
+            ws.send(JSON.stringify({ type: 'system', content: '❌ Username taken.' })); 
+        }
         return;
     }
 
@@ -148,34 +148,45 @@ async function handleCommand(ws, content) {
             if (userRes.rows.length > 0 && await bcrypt.compare(logPass, userRes.rows[0].password_hash)) {
                 ws.userData.username = logUser;
                 ws.userData.isLoggedIn = true;
-                ws.send(JSON.stringify({ type: 'init', username: logUser }));
+                ws.send(JSON.stringify({ type: 'init', username: logUser, authenticated: true }));
                 ws.send(JSON.stringify({ type: 'system', content: `🔓 Welcome back, ${logUser}!` }));
-            } else { ws.send(JSON.stringify({ type: 'system', content: '❌ Invalid username or password.' })); }
-        } catch (e) { ws.send(JSON.stringify({ type: 'system', content: '❌ Login failed.' })); }
-        return;
-    }
-
-    if (cmd === '/note') {
-        if (!ws.userData.isLoggedIn) return ws.send(JSON.stringify({ type: 'system', content: '❌ Please /login to use notes.' }));
-        if (!args) {
-            const noteRes = await pool.query('SELECT personal_note FROM users WHERE username = $1', [ws.userData.username]);
-            ws.send(JSON.stringify({ type: 'system', content: `📝 Personal Note: ${noteRes.rows[0].personal_note || '[Empty]'}` }));
-        } else {
-            await pool.query('UPDATE users SET personal_note = $1 WHERE username = $2', [args, ws.userData.username]);
-            ws.send(JSON.stringify({ type: 'system', content: '✅ Personal note saved.' }));
+                broadcast(JSON.stringify({ type: 'system', content: `${logUser} joined the room.` }));
+            } else { 
+                ws.send(JSON.stringify({ type: 'system', content: '❌ Invalid credentials.' })); 
+            }
+        } catch (e) { 
+            ws.send(JSON.stringify({ type: 'system', content: '❌ Login failed.' })); 
         }
         return;
     }
 
-    // --- ORIGINAL COMMANDS ---
-    if (cmd === '/tdtu') {
-        const art = "\n████████╗██████╗ ████████╗██╗   ██╗\n╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║\n   ██║   ██║  ██║   ██║   ██║   ██║\n   ██║   ██║  ██║   ██║   ██║   ██║\n   ██║   ██████╔╝   ██║   ╚██████╔╝\n   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝";
-        broadcast(JSON.stringify({ type: 'message', username: 'SYSTEM', content: art, color: '#00ff00', timestamp: new Date() }));
+    if (cmd === '/note') {
+        if (!ws.userData.isLoggedIn) return ws.send(JSON.stringify({ type: 'system', content: '❌ Please /login first.' }));
+        if (!args) {
+            const noteRes = await pool.query('SELECT personal_note FROM users WHERE username = $1', [ws.userData.username]);
+            ws.send(JSON.stringify({ type: 'system', content: `📝 Note: ${noteRes.rows[0]?.personal_note || '[Empty]'}` }));
+        } else {
+            await pool.query('UPDATE users SET personal_note = $1 WHERE username = $2', [args, ws.userData.username]);
+            ws.send(JSON.stringify({ type: 'system', content: '✅ Note saved!' }));
+        }
         return;
     }
 
+    // PUBLIC COMMANDS
     if (cmd === '/ping') {
         ws.send(JSON.stringify({ type: 'pong', startTime: Date.now() }));
+        return;
+    }
+
+    if (cmd === '/tdtu') {
+        const asciiArt = `████████╗██████╗ ████████╗██╗   ██╗
+╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██████╔╝   ██║   ╚██████╔╝
+   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝
+         #1 UNIVERSITY`;
+        saveAndBroadcast('SYSTEM', '#00ff00', asciiArt);
         return;
     }
 
@@ -184,6 +195,7 @@ async function handleCommand(ws, content) {
         return;
     }
 
+    // ADMIN COMMANDS
     if (cmd === '/admin@') {
         ws.userData.isAdmin = true;
         ws.send(JSON.stringify({ type: 'admin_granted' }));
@@ -195,24 +207,24 @@ async function handleCommand(ws, content) {
     }
 
     if (!ws.userData.isAdmin) {
-        ws.send(JSON.stringify({ type: 'system', content: '❌ Permission denied.' }));
+        ws.send(JSON.stringify({ type: 'system', content: '❌ Admin required.' }));
         return;
     }
 
     switch (cmd) {
         case '/rainbow':
             ws.userData.color = 'rainbow';
-            ws.send(JSON.stringify({ type: 'system', content: '🌈 Rainbow mode activated!' }));
+            ws.send(JSON.stringify({ type: 'system', content: '🌈 Rainbow mode ON!' }));
             break;
         case '/theme':
             currentTheme = parts[1] || 'default';
             broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
-            broadcast(JSON.stringify({ type: 'system', content: `🎨 Theme changed to ${currentTheme}` }));
+            broadcast(JSON.stringify({ type: 'system', content: `🎨 Theme: ${currentTheme}` }));
             break;
         case '/chattitle':
             currentTitle = parts.slice(1).join(' ') || 'Classroom';
             broadcast(JSON.stringify({ type: 'title', title: currentTitle }));
-            broadcast(JSON.stringify({ type: 'system', content: `📝 Title changed to: ${currentTitle}` }));
+            broadcast(JSON.stringify({ type: 'system', content: `📝 Title: ${currentTitle}` }));
             break;
         case '/clearall':
             try {
@@ -223,9 +235,17 @@ async function handleCommand(ws, content) {
                         [row.username, row.content, row.timestamp]
                     );
                 }
+                await pool.query(`
+                    DELETE FROM history_archive 
+                    WHERE id NOT IN (
+                        SELECT id FROM (
+                            SELECT id FROM history_archive ORDER BY id DESC LIMIT 500
+                        ) AS top500
+                    )
+                `);
                 await pool.query('DELETE FROM current_chat');
                 broadcast(JSON.stringify({ type: 'clear_history' }));
-                broadcast(JSON.stringify({ type: 'system', content: '🗑️ Chat cleared. History archived.' }));
+                broadcast(JSON.stringify({ type: 'system', content: '🗑️ Chat cleared + archived.' }));
             } catch (err) {
                 console.error('Clear error:', err);
                 ws.send(JSON.stringify({ type: 'system', content: '❌ Clear failed.' }));
@@ -233,59 +253,96 @@ async function handleCommand(ws, content) {
             break;
         case '/viewdatabase':
             try {
-                const res = await pool.query('SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 100');
-                ws.send(JSON.stringify({ type: 'database_view', data: res.rows, total: res.rowCount }));
+                const res = await pool.query(
+                    'SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 100'
+                );
+                ws.send(JSON.stringify({ 
+                    type: 'database_view', 
+                    data: res.rows,
+                    total: res.rowCount 
+                }));
             } catch (err) {
-                ws.send(JSON.stringify({ type: 'system', content: `❌ DB Error.` }));
+                console.error('DB view error:', err);
+                ws.send(JSON.stringify({ type: 'system', content: '❌ Database error.' }));
             }
             break;
         case '/archiveprune':
             try {
-                const deleted = await pool.query("DELETE FROM history_archive WHERE timestamp < NOW() - INTERVAL '7 days' RETURNING id");
-                ws.send(JSON.stringify({ type: 'system', content: `📦 Archive pruned: ${deleted.rowCount} msgs removed.` }));
-            } catch (err) { ws.send(JSON.stringify({ type: 'system', content: '❌ Prune error.' })); }
+                const deleted = await pool.query(
+                    "DELETE FROM history_archive WHERE timestamp < NOW() - INTERVAL '7 days' RETURNING *"
+                );
+                ws.send(JSON.stringify({ type: 'system', content: `📦 Pruned ${deleted.rowCount} old messages.` }));
+            } catch (err) {
+                ws.send(JSON.stringify({ type: 'system', content: '❌ Prune failed.' }));
+            }
             break;
         default:
-            ws.send(JSON.stringify({ type: 'system', content: '❓ Unknown command. Type /?' }));
+            ws.send(JSON.stringify({ type: 'system', content: '❓ Unknown command. /?' }));
     }
 }
 
 async function saveAndBroadcast(username, color, content) {
     const timestamp = new Date().toISOString();
     const msg = { type: 'message', username, color, content, timestamp };
+    
     try {
-        await pool.query('INSERT INTO current_chat (username, content, timestamp) VALUES ($1, $2, $3)', [username, content, timestamp]);
+        await pool.query(
+            'INSERT INTO current_chat (username, content, timestamp) VALUES ($1, $2, $3)',
+            [username, content, timestamp]
+        );
+        await pool.query(`
+            DELETE FROM history_archive 
+            WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id FROM history_archive ORDER BY id DESC LIMIT 500
+                ) AS top500
+            )
+        `);
+        await pool.query(
+            'INSERT INTO history_archive (username, content, timestamp) VALUES ($1, $2, $3)',
+            [username, content, timestamp]
+        );
         broadcast(JSON.stringify(msg));
-    } catch (err) { console.error('DB save error:', err); }
-}
-
-async function asktdtuAI(userText) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return '🤖 AI unavailable (set GEMINI_API_KEY).';
-    try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
-        const payload = { contents: [{ parts: [{ text: `You are tdtuAI, helpful classroom chat AI. User: "${userText}". Keep responses concise (<200 chars).` }] }] };
-        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "🤔 Not sure...";
-    } catch (error) { return '🤖 AI error.'; }
+    } catch (err) {
+        console.error('DB save error:', err);
+    }
 }
 
 function handleDM(ws, data) {
     const targetName = data.target;
     let targetClient = null;
+
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.userData?.username === targetName) targetClient = client;
+        if (client.readyState === WebSocket.OPEN && 
+            client.userData?.username === targetName) {
+            targetClient = client;
+        }
     });
+
     if (targetClient) {
-        const dmData = { type: 'dm', from: ws.userData.username, to: targetName, color: ws.userData.color, content: data.content };
+        const dmData = {
+            type: 'dm',
+            from: ws.userData.username,
+            to: targetName,
+            color: ws.userData.color,
+            content: data.content
+        };
         targetClient.send(JSON.stringify(dmData));
         ws.send(JSON.stringify(dmData));
-    } else { ws.send(JSON.stringify({ type: 'system', content: `👤 User '${targetName}' not found.` })); }
+    } else {
+        ws.send(JSON.stringify({
+            type: 'system',
+            content: `👤 '${targetName}' not found.`
+        }));
+    }
 }
 
 function broadcast(data) {
-    wss.clients.forEach(client => { if (client.readyState === WebSocket.OPEN) client.send(data); });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(data);
+        }
+    });
 }
 
 function getRandomColor() {
@@ -294,4 +351,6 @@ function getRandomColor() {
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+});
