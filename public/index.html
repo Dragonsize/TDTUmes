@@ -5,18 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TDTU Messenger</title>
     <style>
-        /* CSS VARIABLES */
         :root {
             --bg-color: #1a1a1a;
             --panel-bg: #000;
             --text-color: #ccc;
-            --accent-color: #00ff00; /* default green */
+            --accent-color: #00ff00;
             --header-bg: #2a2a2a;
             --input-bg: #222;
             --border-color: #333;
         }
 
-        /* Dark Neon Purple Theme */
         body.theme-purple {
             --bg-color: #12001a;
             --panel-bg: #08000c;
@@ -27,7 +25,6 @@
             --border-color: #58008c;
         }
 
-        /* Deep Sea Blue Theme */
         body.theme-blue {
             --bg-color: #051020;
             --panel-bg: #000510;
@@ -38,7 +35,6 @@
             --border-color: #003360;
         }
 
-        /* Ominous Red Theme */
         body.theme-red {
             --bg-color: #1a0505;
             --panel-bg: #0a0000;
@@ -49,7 +45,6 @@
             --border-color: #600000;
         }
 
-        /* Rainbow Animation */
         @keyframes rainbow-anim {
             0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
             14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
@@ -66,21 +61,16 @@
             font-weight: bold;
         }
 
-        /* LAYOUT & UI */
         body { 
             font-family: 'Courier New', Courier, monospace; 
             background: var(--bg-color);
             color: var(--text-color);
-            margin: 0; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            height: 100vh; 
-            box-sizing: border-box; 
+            margin: 0; padding: 20px; 
+            display: flex; flex-direction: column; 
+            height: 100vh; box-sizing: border-box; 
             transition: background 0.5s, color 0.5s;
         }
 
-        /* LOGIN SCREEN OVERLAY */
         #login-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--bg-color); z-index: 1000;
@@ -88,77 +78,51 @@
         }
         
         header {
-            display: flex;
-            gap: 10px;
-            padding-bottom: 15px;
+            display: flex; gap: 10px; padding-bottom: 15px;
             border-bottom: 1px solid var(--border-color);
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            align-items: center;
+            margin-bottom: 10px; flex-wrap: wrap; align-items: center;
         }
 
         .setting-group {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            background: var(--header-bg);
-            padding: 5px 10px;
-            border-radius: 4px;
+            display: flex; align-items: center; gap: 5px;
+            background: var(--header-bg); padding: 5px 10px; border-radius: 4px;
         }
 
         label { font-size: 0.8em; color: var(--text-color); opacity: 0.7; }
 
         input[type="text"].settings-input {
-            background: transparent;
-            border: none;
-            color: #fff;
-            border-bottom: 1px solid #555;
-            width: 100px;
-            font-family: inherit;
+            background: transparent; border: none; color: #fff;
+            border-bottom: 1px solid #555; width: 100px; font-family: inherit;
         }
-        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid var(--accent-color); }
+        input[type="text"].settings-input:focus { 
+            outline: none; border-bottom: 1px solid var(--accent-color); 
+        }
 
         input[type="color"] {
-            background: transparent;
-            border: none;
-            width: 30px;
-            height: 30px;
-            cursor: pointer;
+            background: transparent; border: none; width: 30px; height: 30px; cursor: pointer;
         }
 
         #chatTitle {
-            flex: 2;
-            text-align: center;
-            font-weight: bold;
-            font-size: 1.2em;
-            color: var(--accent-color);
-            text-shadow: 0 0 5px rgba(0,0,0,0.5);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            flex: 2; text-align: center; font-weight: bold; font-size: 1.2em;
+            color: var(--accent-color); text-shadow: 0 0 5px rgba(0,0,0,0.5);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
 
         #chat-container { 
-            flex: 1; 
-            overflow-y: auto; 
-            border: 1px solid var(--border-color);
-            padding: 10px; 
-            margin-bottom: 10px; 
-            background: var(--panel-bg); 
+            flex: 1; overflow-y: auto; border: 1px solid var(--border-color);
+            padding: 10px; margin-bottom: 10px; background: var(--panel-bg); 
             transition: background 0.5s, border-color 0.5s;
+            font-size: 0.9em;
         }
         
         .message { margin-bottom: 5px; line-height: 1.4; }
-        .system { color: #777; font-style: italic; font-size: 0.9em; }
+        .system { color: #777; font-style: italic; font-size: 0.85em; white-space: pre-wrap; }
         .user-msg { color: var(--text-color); }
         .dm-msg { color: #ff00ff; }
         .username-tag { font-weight: bold; }
 
         .ascii-art {
-            display: block;
-            white-space: pre;
-            overflow-x: auto;
-            width: 100%;
+            display: block; white-space: pre; overflow-x: auto; width: 100%; font-size: 0.8em;
         }
 
         @media (max-width: 600px) {
@@ -167,23 +131,14 @@
         
         #input-area { display: flex; gap: 10px; }
         input#messageInput { 
-            flex: 1; 
-            padding: 12px; 
-            background: var(--input-bg);
-            border: 1px solid var(--border-color); 
-            color: #fff; 
-            font-family: inherit; 
+            flex: 1; padding: 12px; background: var(--input-bg);
+            border: 1px solid var(--border-color); color: #fff; font-family: inherit; 
         }
         input#messageInput:focus { outline: none; border-color: var(--accent-color); }
         
         button { 
-            padding: 10px 20px; 
-            background: var(--accent-color); 
-            color: #000; 
-            border: none; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: background 0.3s;
+            padding: 10px 20px; background: var(--accent-color); color: #000; 
+            border: none; font-weight: bold; cursor: pointer; transition: background 0.3s;
         }
         button:hover { filter: brightness(1.2); }
     </style>
@@ -207,9 +162,7 @@
             <label>COLOR:</label>
             <input type="color" id="colorInput" value="#00ff00">
         </div>
-        
         <div id="chatTitle">Classroom</div>
-
         <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
             STATUS: <span id="status">Connecting...</span>
         </div>
@@ -249,12 +202,15 @@
             } else if (data.type === 'system') {
                 addMessage('system', data.content);
             } else if (data.type === 'message') {
-                addMessage('user', data.content, data.username, data.color);
+                const timeStr = new Date(data.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
+                addMessage('user', `${data.content} [${timeStr}]`, data.username, data.color);
             } else if (data.type === 'history') {
-                // CLEAR AND LOAD FROM NEON DATABASE
                 chatContainer.innerHTML = '';
-                data.content.forEach(msg => addMessage('user', msg.content, msg.username, msg.color));
-                addMessage('system', '--- Chat History Restored from Database ---');
+                data.content.forEach(msg => {
+                    const timeStr = new Date(msg.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'});
+                    addMessage('user', `${msg.content} [${timeStr}]`, msg.username, '#888');
+                });
+                addMessage('system', '--- Current Chat History Loaded ---');
             } else if (data.type === 'dm') {
                 const prefix = `[DM] ${data.from} -> ${data.to}`;
                 addMessage('dm', data.content, prefix, data.color);
@@ -269,7 +225,7 @@
                 chatContainer.innerHTML = '';
             } else if (data.type === 'admin_granted') {
                 isAdmin = true;
-                addMessage('system', '>> Admin Privileges Unlocked <<');
+                addMessage('system', '🔐 Admin privileges granted! Use: /viewdatabase');
             }
         };
 
@@ -292,7 +248,6 @@
             const text = messageInput.value.trim();
             if (!text) return;
 
-            // Handle Local-only UI commands
             if (text.toLowerCase() === '/cls') {
                 chatContainer.innerHTML = '';
                 addMessage('system', 'Local chat cleared.');
@@ -304,14 +259,13 @@
             messageInput.value = '';
         }
 
-        // AUTOCOMPLETE (TAB KEY)
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Tab') {
                 e.preventDefault(); 
                 const val = messageInput.value;
-                const publicCmds = ['/m ', '/tdtu', '/ping', '/cls', '/?'];
-                const adminCmds = ['/rainbow', '/theme ', '/chattitle ', '/clearall'];
-                let availableCmds = isAdmin ? [...publicCmds, ...adminCmds] : publicCmds;
+                const publicCmds = ['/m ', '/tdtu', '/ping', '/cls'];
+                const adminCmds = isAdmin ? ['/admin@', '/rainbow', '/theme ', '/chattitle ', '/clearall', '/viewdatabase', '/archiveprune'] : [];
+                let availableCmds = [...publicCmds, ...adminCmds];
                 
                 if (val.startsWith('/')) {
                     const matches = availableCmds.filter(c => c.startsWith(val));
@@ -372,11 +326,6 @@
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
         usernameInput.addEventListener('change', updateName);
         colorInput.addEventListener('change', updateColor);
-
-        function convertToHex(colorStr) {
-            if(colorStr && colorStr.startsWith('#')) return colorStr;
-            return "#00ff00"; 
-        }
     </script>
 </body>
 </html>
