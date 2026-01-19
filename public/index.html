@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TDTU Messenger</title>
     <style>
+        /* CSS Variables for Dynamic Themes */
         :root {
             --bg-color: #1a1a1a;
             --panel-bg: #000;
@@ -93,83 +94,58 @@
         }
         input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid var(--accent-color); }
 
-        input[type="color"] { background: transparent; border: none; width: 30px; height: 30px; cursor: pointer; }
-
         #chatTitle {
             flex: 2; text-align: center; font-weight: bold; font-size: 1.2em;
             color: var(--accent-color); text-shadow: 0 0 5px rgba(0,0,0,0.5);
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
 
         #chat-container { 
             flex: 1; overflow-y: auto; border: 1px solid var(--border-color);
             padding: 10px; margin-bottom: 10px; background: var(--panel-bg); 
-            transition: background 0.5s, border-color 0.5s;
             font-size: 0.9em;
         }
 
-        .message {
-            margin-bottom: 5px; line-height: 1.4;
-            display: flex; justify-content: space-between; align-items: flex-start;
-            min-height: 22px;
-        }
-        
-        .message-content { flex: 1; white-space: pre-wrap; }
-        .system { color: #777; font-style: italic; font-size: 0.85em; justify-content: center; text-align: center; }
-        .user-msg { color: var(--text-color); }
-        .dm-msg { color: #ff00ff; }
-        .username-tag { font-weight: bold; }
+        .message { margin-bottom: 5px; display: flex; justify-content: space-between; }
+        .message-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
+        .system { color: #777; font-style: italic; font-size: 0.85em; justify-content: center; }
+        .dm-msg { color: #ff00ff; border-left: 2px solid #ff00ff; padding-left: 5px; }
+        .timestamp { color: #666; font-size: 0.75em; margin-left: 10px; white-space: nowrap; }
 
-        .ascii-art { display: block; white-space: pre; overflow-x: auto; width: 100%; font-size: 0.8em; }
+        /* Database Table Style */
+        .db-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8em; }
+        .db-table th, .db-table td { border: 1px solid #444; padding: 4px; text-align: left; }
+        .db-table th { background: #222; color: var(--accent-color); }
 
-        .timestamp {
-            color: #666 !important;
-            font-size: 0.75em !important;
-            margin-left: 10px;
-            flex-shrink: 0;
-            white-space: nowrap;
-            padding-top: 2px;
-        }
-
-        @media (max-width: 600px) {
-            .ascii-art { font-size: 10px; line-height: 10px; }
-            .timestamp { font-size: 0.7em; margin-left: 5px; }
-        }
-        
         #input-area { display: flex; gap: 10px; }
         input#messageInput { 
             flex: 1; padding: 12px; background: var(--input-bg);
             border: 1px solid var(--border-color); color: #fff; font-family: inherit; 
         }
-        input#messageInput:focus { outline: none; border-color: var(--accent-color); }
-        
         button { 
             padding: 10px 20px; background: var(--accent-color); color: #000; 
-            border: none; font-weight: bold; cursor: pointer; transition: background 0.3s;
+            border: none; font-weight: bold; cursor: pointer;
         }
-        button:hover { filter: brightness(1.2); }
     </style>
 </head>
 <body>
+
     <div id="login-overlay">
-        <h1 style="color:var(--accent-color); text-shadow: 0 0 10px var(--accent-color); margin-bottom: 30px;">TDTU MESSENGER</h1>
-        <div class="setting-group" style="padding: 15px;">
-            <input type="text" id="loginUsername" placeholder="Pick a username..." style="font-size: 1.5em; width: 250px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none;">
-        </div>
-        <button onclick="enterChat()" style="margin-top: 20px; width: 280px; font-size: 1.1em;">CONNECT TO SERVER</button>
+        <h1 style="color:var(--accent-color); text-shadow: 0 0 10px var(--accent-color);">TDTU MESSENGER</h1>
+        <input type="text" id="loginUsername" placeholder="Pick a username..." style="font-size: 1.5em; width: 280px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none; margin: 20px;">
+        <button onclick="enterChat()" style="width: 280px;">CONNECT TO SERVER</button>
     </div>
 
     <header>
         <div class="setting-group">
             <label>NAME:</label>
-            <input type="text" id="usernameInput" class="settings-input" placeholder="Guest">
+            <input type="text" id="usernameInput" class="settings-input">
         </div>
         <div class="setting-group">
             <label>COLOR:</label>
             <input type="color" id="colorInput" value="#00ff00">
         </div>
         <div id="chatTitle">Classroom</div>
-        <div style="flex:1; text-align: right; font-size: 0.8em; color: var(--text-color);">
+        <div style="flex:1; text-align: right; font-size: 0.8em;">
             STATUS: <span id="status">Connecting...</span>
         </div>
     </header>
@@ -177,7 +153,7 @@
     <div id="chat-container"></div>
 
     <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message... /? for cmds" autofocus>
+        <input type="text" id="messageInput" placeholder="Type a message... /? for commands" autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -203,63 +179,57 @@
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             
-            if (data.type === 'init') {
-                usernameInput.value = data.username;
-            } else if (data.type === 'system') {
-                addMessage('system', data.content);
-            } else if (data.type === 'message') {
-                const timeStr = new Date(data.timestamp).toLocaleTimeString('vi-VN', { 
-                    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
-                    timeZone: 'Asia/Ho_Chi_Minh'
-                });
-                const dateStr = new Date(data.timestamp).toLocaleDateString('vi-VN', { 
-                    day: 'numeric', month: 'numeric', year: 'numeric',
-                    timeZone: 'Asia/Ho_Chi_Minh'
-                });
-                addMessage('user', data.content, data.username, data.color, `${timeStr} ${dateStr}`);
-            } else if (data.type === 'history') {
-                chatContainer.innerHTML = '';
-                data.content.forEach(msg => {
-                    const timeStr = new Date(msg.timestamp).toLocaleTimeString('vi-VN', { 
-                        hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
-                        timeZone: 'Asia/Ho_Chi_Minh'
-                    });
-                    const dateStr = new Date(msg.timestamp).toLocaleDateString('vi-VN', { 
-                        day: 'numeric', month: 'numeric', year: 'numeric',
-                        timeZone: 'Asia/Ho_Chi_Minh'
-                    });
-                    addMessage('user', msg.content, msg.username, '#888', `${timeStr} ${dateStr}`);
-                });
-                addMessage('system', '--- Current Chat History Loaded ---');
-            } else if (data.type === 'dm') {
-                const prefix = `[DM] ${data.from} -> ${data.to}`;
-                addMessage('dm', data.content, prefix, data.color);
-            } else if (data.type === 'pong') {
-                const latency = Date.now() - data.startTime;
-                addMessage('system', `Pong! Latency: ${latency}ms`);
-            } else if (data.type === 'theme') {
-                applyTheme(data.theme);
-            } else if (data.type === 'title') {
-                chatTitle.textContent = data.title;
-            } else if (data.type === 'clear_history') {
-                chatContainer.innerHTML = '';
-            } else if (data.type === 'admin_granted') {
-                isAdmin = true;
-                addMessage('system', '🔐 Admin privileges granted!');
+            switch(data.type) {
+                case 'init':
+                    usernameInput.value = data.username;
+                    break;
+                case 'system':
+                    addMessage('system', data.content);
+                    break;
+                case 'message':
+                    renderChatMessage(data);
+                    break;
+                case 'dm':
+                    addMessage('dm', `${data.from} -> ${data.to}: ${data.content}`, null, data.color);
+                    break;
+                case 'history':
+                    chatContainer.innerHTML = '<div class="system">> Loading chat history...</div>';
+                    data.content.forEach(msg => renderChatMessage(msg));
+                    addMessage('system', '--- End of History ---');
+                    break;
+                case 'theme':
+                    applyTheme(data.theme);
+                    break;
+                case 'title':
+                    chatTitle.textContent = data.title;
+                    break;
+                case 'pong':
+                    const latency = Date.now() - data.startTime;
+                    addMessage('system', `Latency: ${latency}ms`);
+                    break;
+                case 'admin_granted':
+                    isAdmin = true;
+                    addMessage('system', '🔐 Admin Access Unlocked.');
+                    break;
+                case 'clear_history':
+                    chatContainer.innerHTML = '';
+                    break;
+                case 'database_view':
+                    renderDatabaseTable(data.data);
+                    break;
             }
         };
 
         ws.onclose = () => {
             statusSpan.textContent = "Disconnected";
             statusSpan.style.color = "red";
-            addMessage('system', 'Connection lost. Please refresh.');
+            addMessage('system', '❌ Connection lost.');
         };
 
         function enterChat() {
             const name = document.getElementById('loginUsername').value.trim();
             if (name) {
-                usernameInput.value = name;
-                updateName();
+                ws.send(JSON.stringify({ type: 'update_name', content: name }));
                 document.getElementById('login-overlay').style.display = 'none';
             }
         }
@@ -270,7 +240,6 @@
 
             if (text.toLowerCase() === '/cls') {
                 chatContainer.innerHTML = '';
-                addMessage('system', 'Local chat cleared.');
                 messageInput.value = '';
                 return;
             }
@@ -279,85 +248,63 @@
             messageInput.value = '';
         }
 
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Tab') {
-                e.preventDefault(); 
-                const val = messageInput.value;
-                const publicCmds = ['/?', '/ping', '/m ', '/tdtu', '/cls'];
-                const adminCmds = isAdmin ? ['/admin@', '/rainbow', '/theme ', '/chattitle ', '/clearall', '/viewdatabase', '/archiveprune'] : [];
-                let availableCmds = [...publicCmds, ...adminCmds];
-                
-                if (val.startsWith('/')) {
-                    const matches = availableCmds.filter(c => c.startsWith(val));
-                    if (matches.length > 0) {
-                        const exactMatchIndex = matches.indexOf(val);
-                        const nextIndex = (exactMatchIndex + 1) % matches.length;
-                        messageInput.value = matches[nextIndex];
-                    }
-                }
-            }
-        });
+        function renderChatMessage(data) {
+            const time = new Date(data.timestamp).toLocaleTimeString();
+            addMessage('user', data.content, data.username, data.color, time);
+        }
 
         function addMessage(type, text, username = null, color = null, timestamp = null) {
             const div = document.createElement('div');
-            let msgClass = 'user-msg';
-            if (type === 'system') msgClass = 'system';
-            if (type === 'dm') msgClass = 'dm-msg';
+            div.className = `message ${type === 'system' ? 'system' : (type === 'dm' ? 'dm-msg' : 'user-msg')}`;
 
-            div.className = `message ${msgClass}`;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
 
-            if (username && type !== 'system') {
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'message-content';
-                
+            if (username) {
                 const nameSpan = document.createElement('span');
-                nameSpan.className = 'username-tag';
-                if (color === 'rainbow') {
-                    nameSpan.classList.add('rainbow-text');
-                } else {
-                    nameSpan.style.color = color || 'var(--text-color)';
-                }
-                nameSpan.textContent = type === 'dm' ? `${username} ` : `[${username}] `;
-                
-                const textSpan = document.createElement('span');
-                if (text.includes('█')) {
-                    textSpan.className = 'ascii-art';
-                }
-                textSpan.textContent = text;
-                
+                nameSpan.className = color === 'rainbow' ? 'rainbow-text' : '';
+                nameSpan.style.color = color !== 'rainbow' ? color : '';
+                nameSpan.style.fontWeight = 'bold';
+                nameSpan.textContent = `[${username}] `;
                 contentDiv.appendChild(nameSpan);
-                contentDiv.appendChild(textSpan);
-                div.appendChild(contentDiv);
-                
-                if (timestamp) {
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'timestamp';
-                    timeSpan.textContent = timestamp;
-                    div.appendChild(timeSpan);
-                }
-            } else {
-                const textSpan = document.createElement('span');
-                textSpan.textContent = `> ${text}`;
-                div.appendChild(textSpan);
             }
-            
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            contentDiv.appendChild(textSpan);
+            div.appendChild(contentDiv);
+
+            if (timestamp) {
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'timestamp';
+                timeSpan.textContent = timestamp;
+                div.appendChild(timeSpan);
+            }
+
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function applyTheme(themeName) {
-            document.body.className = ''; 
-            if (['purple', 'blue', 'red'].includes(themeName)) {
-                document.body.classList.add('theme-' + themeName);
-            }
+        function renderDatabaseTable(rows) {
+            let html = '<table class="db-table"><tr><th>ID</th><th>User</th><th>Msg</th><th>Time</th></tr>';
+            rows.forEach(r => {
+                html += `<tr><td>${r.id}</td><td>${r.username}</td><td>${r.content}</td><td>${new Date(r.timestamp).toLocaleString()}</td></tr>`;
+            });
+            html += '</table>';
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>Database View (Last 100):</strong>` + html;
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function updateName() { ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value })); }
-        function updateColor() { ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value })); }
+        function applyTheme(theme) {
+            document.body.className = theme !== 'default' ? `theme-${theme}` : '';
+        }
 
+        // Listeners
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-        usernameInput.addEventListener('change', updateName);
-        colorInput.addEventListener('change', updateColor);
+        usernameInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value })));
+        colorInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value })));
     </script>
 </body>
 </html>
