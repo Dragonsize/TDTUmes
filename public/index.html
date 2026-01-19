@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TDTU Messenger</title>
     <style>
-        /* CSS Variables for Dynamic Themes */
         :root {
             --bg-color: #1a1a1a;
             --panel-bg: #000;
@@ -16,35 +15,10 @@
             --border-color: #333;
         }
 
-        body.theme-purple {
-            --bg-color: #12001a;
-            --panel-bg: #08000c;
-            --text-color: #c48eff;
-            --accent-color: #9d00ff;
-            --header-bg: #1f002b;
-            --input-bg: #16001f;
-            --border-color: #58008c;
-        }
-
-        body.theme-blue {
-            --bg-color: #051020;
-            --panel-bg: #000510;
-            --text-color: #b0e0ff;
-            --accent-color: #0088ff;
-            --header-bg: #001a36;
-            --input-bg: #001225;
-            --border-color: #003360;
-        }
-
-        body.theme-red {
-            --bg-color: #1a0505;
-            --panel-bg: #0a0000;
-            --text-color: #ffb0b0;
-            --accent-color: #ff0000;
-            --header-bg: #360000;
-            --input-bg: #250000;
-            --border-color: #600000;
-        }
+        /* Themes */
+        body.theme-purple { --bg-color: #12001a; --panel-bg: #08000c; --text-color: #c48eff; --accent-color: #9d00ff; --header-bg: #1f002b; --input-bg: #16001f; --border-color: #58008c; }
+        body.theme-blue { --bg-color: #051020; --panel-bg: #000510; --text-color: #b0e0ff; --accent-color: #0088ff; --header-bg: #001a36; --input-bg: #001225; --border-color: #003360; }
+        body.theme-red { --bg-color: #1a0505; --panel-bg: #0a0000; --text-color: #ffb0b0; --accent-color: #ff0000; --header-bg: #360000; --input-bg: #250000; --border-color: #600000; }
 
         @keyframes rainbow-anim {
             0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
@@ -56,17 +30,13 @@
             85% { color: #9400d3; text-shadow: 0 0 5px #9400d3; }
             100% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
         }
-
         .rainbow-text { animation: rainbow-anim 3s linear infinite; font-weight: bold; }
 
         body { 
             font-family: 'Courier New', Courier, monospace; 
-            background: var(--bg-color);
-            color: var(--text-color);
-            margin: 0; padding: 20px; 
-            display: flex; flex-direction: column; 
-            height: 100vh; box-sizing: border-box; 
-            transition: background 0.5s, color 0.5s;
+            background: var(--bg-color); color: var(--text-color);
+            margin: 0; padding: 20px; display: flex; flex-direction: column; 
+            height: 100vh; box-sizing: border-box; transition: background 0.5s, color 0.5s;
         }
 
         #login-overlay {
@@ -76,62 +46,37 @@
         }
         
         header {
-            display: flex; gap: 10px; padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
+            display: flex; gap: 10px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color);
             margin-bottom: 10px; flex-wrap: wrap; align-items: center;
         }
 
-        .setting-group {
-            display: flex; align-items: center; gap: 5px;
-            background: var(--header-bg); padding: 5px 10px; border-radius: 4px;
-        }
-
+        .setting-group { display: flex; align-items: center; gap: 5px; background: var(--header-bg); padding: 5px 10px; border-radius: 4px; }
         label { font-size: 0.8em; color: var(--text-color); opacity: 0.7; }
-
-        input[type="text"].settings-input {
-            background: transparent; border: none; color: #fff;
-            border-bottom: 1px solid #555; width: 100px; font-family: inherit;
-        }
-        input[type="text"].settings-input:focus { outline: none; border-bottom: 1px solid var(--accent-color); }
-
-        #chatTitle {
-            flex: 2; text-align: center; font-weight: bold; font-size: 1.2em;
-            color: var(--accent-color); text-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-
-        #chat-container { 
-            flex: 1; overflow-y: auto; border: 1px solid var(--border-color);
-            padding: 10px; margin-bottom: 10px; background: var(--panel-bg); 
-            font-size: 0.9em;
-        }
+        input[type="text"].settings-input { background: transparent; border: none; color: #fff; border-bottom: 1px solid #555; width: 100px; font-family: inherit; }
+        #chatTitle { flex: 2; text-align: center; font-weight: bold; font-size: 1.2em; color: var(--accent-color); text-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        #chat-container { flex: 1; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; margin-bottom: 10px; background: var(--panel-bg); font-size: 0.9em; }
 
         .message { margin-bottom: 5px; display: flex; justify-content: space-between; }
         .message-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
-        .system { color: #777; font-style: italic; font-size: 0.85em; justify-content: center; }
+        .system { color: #777; font-style: italic; font-size: 0.85em; }
         .dm-msg { color: #ff00ff; border-left: 2px solid #ff00ff; padding-left: 5px; }
         .timestamp { color: #666; font-size: 0.75em; margin-left: 10px; white-space: nowrap; }
 
-        /* Database Table Style */
         .db-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8em; }
         .db-table th, .db-table td { border: 1px solid #444; padding: 4px; text-align: left; }
         .db-table th { background: #222; color: var(--accent-color); }
 
         #input-area { display: flex; gap: 10px; }
-        input#messageInput { 
-            flex: 1; padding: 12px; background: var(--input-bg);
-            border: 1px solid var(--border-color); color: #fff; font-family: inherit; 
-        }
-        button { 
-            padding: 10px 20px; background: var(--accent-color); color: #000; 
-            border: none; font-weight: bold; cursor: pointer;
-        }
+        input#messageInput { flex: 1; padding: 12px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; font-family: inherit; }
+        button { padding: 10px 20px; background: var(--accent-color); color: #000; border: none; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="login-overlay">
         <h1 style="color:var(--accent-color); text-shadow: 0 0 10px var(--accent-color);">TDTU MESSENGER</h1>
-        <input type="text" id="loginUsername" placeholder="Pick a username..." style="font-size: 1.5em; width: 280px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none; margin: 20px;">
+        <p style="color: #888; font-size: 0.8em;">Login/Register inside chat or enter as Guest</p>
+        <input type="text" id="loginUsername" placeholder="Pick a guest name..." style="font-size: 1.5em; width: 280px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none; margin: 20px;">
         <button onclick="enterChat()" style="width: 280px;">CONNECT TO SERVER</button>
     </div>
 
@@ -153,7 +98,7 @@
     <div id="chat-container"></div>
 
     <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message... /? for commands" autofocus>
+        <input type="text" id="messageInput" placeholder="Type /register, /login, or /note..." autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -229,7 +174,8 @@
         function enterChat() {
             const name = document.getElementById('loginUsername').value.trim();
             if (name) {
-                ws.send(JSON.stringify({ type: 'update_name', content: name }));
+                // By default, send update_name for Guest entry
+                ws.send(JSON.stringify({ type: 'message', content: name })); 
                 document.getElementById('login-overlay').style.display = 'none';
             }
         }
@@ -237,13 +183,11 @@
         function sendMessage() {
             const text = messageInput.value.trim();
             if (!text) return;
-
             if (text.toLowerCase() === '/cls') {
                 chatContainer.innerHTML = '';
                 messageInput.value = '';
                 return;
             }
-
             ws.send(JSON.stringify({ type: 'message', content: text }));
             messageInput.value = '';
         }
@@ -262,14 +206,19 @@
 
             if (username) {
                 const nameSpan = document.createElement('span');
-                nameSpan.className = color === 'rainbow' ? 'rainbow-text' : '';
-                nameSpan.style.color = color !== 'rainbow' ? color : '';
+                if (color === 'rainbow') nameSpan.className = 'rainbow-text';
+                else nameSpan.style.color = color || 'var(--accent-color)';
                 nameSpan.style.fontWeight = 'bold';
                 nameSpan.textContent = `[${username}] `;
                 contentDiv.appendChild(nameSpan);
             }
 
             const textSpan = document.createElement('span');
+            // Check for ASCII art to apply monospace
+            if (text.includes('█')) {
+                textSpan.style.fontFamily = 'monospace';
+                textSpan.style.display = 'block';
+            }
             textSpan.textContent = text;
             contentDiv.appendChild(textSpan);
             div.appendChild(contentDiv);
@@ -301,7 +250,6 @@
             document.body.className = theme !== 'default' ? `theme-${theme}` : '';
         }
 
-        // Listeners
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
         usernameInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value })));
         colorInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value })));
