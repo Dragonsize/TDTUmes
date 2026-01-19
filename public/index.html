@@ -13,6 +13,8 @@
             --header-bg: #2a2a2a;
             --input-bg: #222;
             --border-color: #333;
+            --error-color: #ff4444;
+            --success-color: #44ff44;
         }
 
         /* Themes */
@@ -43,6 +45,59 @@
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--bg-color); z-index: 1000;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 20px;
+        }
+
+        .login-form {
+            background: var(--panel-bg);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid var(--border-color);
+            min-width: 350px;
+        }
+
+        .login-form h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            font-family: inherit;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .login-form button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .login-form button:hover {
+            opacity: 0.9;
+        }
+
+        .error-msg {
+            color: var(--error-color);
+            font-size: 0.9em;
+            text-align: center;
+            margin: 10px 0;
+            display: none;
         }
         
         header {
@@ -68,44 +123,70 @@
 
         #input-area { display: flex; gap: 10px; }
         input#messageInput { flex: 1; padding: 12px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; font-family: inherit; }
-        button { padding: 10px 20px; background: var(--accent-color); color: #000; border: none; font-weight: bold; cursor: pointer; }
+        button { padding: 10px 20px; background: var(--accent-color); color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
     </style>
 </head>
 <body>
 
     <div id="login-overlay">
-        <h1 style="color:var(--accent-color); text-shadow: 0 0 10px var(--accent-color);">TDTU MESSENGER</h1>
-        <p style="color: #888; font-size: 0.8em;">Login/Register inside chat or enter as Guest</p>
-        <input type="text" id="loginUsername" placeholder="Pick a guest name..." style="font-size: 1.5em; width: 280px; text-align: center; border:none; background:transparent; color:#fff; border-bottom: 2px solid var(--accent-color); outline:none; margin: 20px;">
-        <button onclick="enterChat()" style="width: 280px;">CONNECT TO SERVER</button>
+        <div class="login-form">
+            <h2>🔐 TDTU MESSENGER</h2>
+            
+            <div style="text-align: center; color: #888; font-size: 0.9em; margin-bottom: 20px;">
+                Secure login required
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button onclick="attemptLogin()">LOGIN</button>
+                <div class="error-msg" id="loginError">Invalid credentials</div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="#" onclick="showSignup()" style="color: var(--accent-color); text-decoration: underline; cursor: pointer;">Don't have account? Sign up</a>
+                </div>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signupForm" style="display: none;">
+                <input type="text" id="signupUsername" placeholder="Username" maxlength="20" required>
+                <input type="password" id="signupPassword" placeholder="Password" required>
+                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" required>
+                <button onclick="attemptSignup()">CREATE ACCOUNT</button>
+                <div class="error-msg" id="signupError"></div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a href="#" onclick="showLogin()" style="color: var(--accent-color); text-decoration: underline; cursor: pointer;">Back to Login</a>
+                </div>
+            </div>
+        </div>
     </div>
 
     <header>
         <div class="setting-group">
             <label>NAME:</label>
-            <input type="text" id="usernameInput" class="settings-input">
+            <input type="text" id="usernameInput" class="settings-input" disabled>
         </div>
         <div class="setting-group">
             <label>COLOR:</label>
-            <input type="color" id="colorInput" value="#00ff00">
+            <input type="color" id="colorInput" value="#00ff00" disabled>
         </div>
         <div id="chatTitle">Classroom</div>
         <div style="flex:1; text-align: right; font-size: 0.8em;">
-            STATUS: <span id="status">Connecting...</span>
+            STATUS: <span id="status">Not Connected</span>
         </div>
     </header>
 
     <div id="chat-container"></div>
 
-    <div id="input-area">
-        <input type="text" id="messageInput" placeholder="Type /register, /login, or /note..." autofocus>
+    <div id="input-area" style="display: none;">
+        <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
     <script>
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host;
-        const ws = new WebSocket(wsUrl);
+        let ws = null;
         
         const chatContainer = document.getElementById('chat-container');
         const messageInput = document.getElementById('messageInput');
@@ -113,76 +194,172 @@
         const colorInput = document.getElementById('colorInput');
         const statusSpan = document.getElementById('status');
         const chatTitle = document.getElementById('chatTitle');
+        const loginOverlay = document.getElementById('login-overlay');
+        const inputArea = document.getElementById('input-area');
 
         let isAdmin = false;
+        let isAuthenticated = false;
 
-        ws.onopen = () => {
-            statusSpan.textContent = "Connected";
-            statusSpan.style.color = "var(--accent-color)";
-        };
+        function showSignup() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('signupForm').style.display = 'block';
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('signupError').style.display = 'none';
+            document.getElementById('signupUsername').focus();
+        }
 
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
+        function showLogin() {
+            document.getElementById('signupForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('signupError').style.display = 'none';
+            document.getElementById('loginUsername').focus();
+        }
+
+        function attemptLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
             
-            switch(data.type) {
-                case 'init':
-                    usernameInput.value = data.username;
-                    break;
-                case 'system':
-                    addMessage('system', data.content);
-                    break;
-                case 'message':
-                    renderChatMessage(data);
-                    break;
-                case 'dm':
-                    addMessage('dm', `${data.from} -> ${data.to}: ${data.content}`, null, data.color);
-                    break;
-                case 'history':
-                    chatContainer.innerHTML = '<div class="system">> Loading chat history...</div>';
-                    data.content.forEach(msg => renderChatMessage(msg));
-                    addMessage('system', '--- End of History ---');
-                    break;
-                case 'theme':
-                    applyTheme(data.theme);
-                    break;
-                case 'title':
-                    chatTitle.textContent = data.title;
-                    break;
-                case 'pong':
-                    const latency = Date.now() - data.startTime;
-                    addMessage('system', `Latency: ${latency}ms`);
-                    break;
-                case 'admin_granted':
-                    isAdmin = true;
-                    addMessage('system', '🔐 Admin Access Unlocked.');
-                    break;
-                case 'clear_history':
-                    chatContainer.innerHTML = '';
-                    break;
-                case 'database_view':
-                    renderDatabaseTable(data.data);
-                    break;
+            if (!username || !password) {
+                showError('loginError', 'Please fill all fields');
+                return;
             }
-        };
 
-        ws.onclose = () => {
-            statusSpan.textContent = "Disconnected";
-            statusSpan.style.color = "red";
-            addMessage('system', '❌ Connection lost.');
-        };
-
-        function enterChat() {
-            const name = document.getElementById('loginUsername').value.trim();
-            if (name) {
-                // By default, send update_name for Guest entry
-                ws.send(JSON.stringify({ type: 'message', content: name })); 
-                document.getElementById('login-overlay').style.display = 'none';
+            // Send login command via WebSocket if connected, or connect first
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'message', content: `/login ${username} ${password}` }));
+            } else {
+                connectToServer(username, password, 'login');
             }
+        }
+
+        function attemptSignup() {
+            const username = document.getElementById('signupUsername').value.trim();
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('signupConfirmPassword').value;
+            
+            if (!username || !password || !confirmPassword) {
+                showError('signupError', 'Please fill all fields');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showError('signupError', 'Passwords do not match');
+                return;
+            }
+            
+            if (password.length < 4) {
+                showError('signupError', 'Password must be at least 4 characters');
+                return;
+            }
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'message', content: `/register ${username} ${password}` }));
+            } else {
+                connectToServer(username, password, 'register');
+            }
+        }
+
+        function showError(elementId, message) {
+            const errorEl = document.getElementById(elementId);
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function connectToServer(username, password, authType) {
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                statusSpan.textContent = "Connected - Authenticating...";
+                const command = authType === 'login' ? `/login ${username} ${password}` : `/register ${username} ${password}`;
+                ws.send(JSON.stringify({ type: 'message', content: command }));
+            };
+
+            // Reuse the same message handler
+            setupWebSocketHandlers();
+        }
+
+        function setupWebSocketHandlers() {
+            if (!ws) return;
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'init':
+                        usernameInput.value = data.username;
+                        isAuthenticated = data.authenticated;
+                        if (isAuthenticated) {
+                            loginOverlay.style.display = 'none';
+                            inputArea.style.display = 'flex';
+                            usernameInput.disabled = false;
+                            colorInput.disabled = false;
+                            statusSpan.textContent = "Authenticated";
+                            statusSpan.style.color = "var(--success-color)";
+                        }
+                        break;
+                    case 'auth_success':
+                        loginOverlay.style.display = 'none';
+                        inputArea.style.display = 'flex';
+                        usernameInput.disabled = false;
+                        colorInput.disabled = false;
+                        statusSpan.textContent = "Authenticated";
+                        statusSpan.style.color = "var(--success-color)";
+                        break;
+                    case 'auth_error':
+                        showError(data.form === 'login' ? 'loginError' : 'signupError', data.message);
+                        statusSpan.textContent = "Auth Failed";
+                        statusSpan.style.color = "var(--error-color)";
+                        break;
+                    case 'system':
+                        addMessage('system', data.content);
+                        break;
+                    case 'message':
+                        renderChatMessage(data);
+                        break;
+                    case 'dm':
+                        addMessage('dm', `${data.from} -> ${data.to}: ${data.content}`, null, data.color);
+                        break;
+                    case 'history':
+                        chatContainer.innerHTML = '<div class="system">> Loading chat history...</div>';
+                        data.content.forEach(msg => renderChatMessage(msg));
+                        addMessage('system', '--- End of History ---');
+                        break;
+                    case 'theme':
+                        applyTheme(data.theme);
+                        break;
+                    case 'title':
+                        chatTitle.textContent = data.title;
+                        break;
+                    case 'pong':
+                        const latency = Date.now() - data.startTime;
+                        addMessage('system', `Latency: ${latency}ms`);
+                        break;
+                    case 'admin_granted':
+                        isAdmin = true;
+                        addMessage('system', '🔐 Admin Access Unlocked.');
+                        break;
+                    case 'clear_history':
+                        chatContainer.innerHTML = '';
+                        break;
+                    case 'database_view':
+                        renderDatabaseTable(data.data);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                statusSpan.textContent = "Disconnected";
+                statusSpan.style.color = "var(--error-color)";
+                addMessage('system', '❌ Connection lost. Please refresh.');
+                loginOverlay.style.display = 'flex';
+                inputArea.style.display = 'none';
+            };
         }
 
         function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text) return;
+            if (!text || !isAuthenticated) return;
             if (text.toLowerCase() === '/cls') {
                 chatContainer.innerHTML = '';
                 messageInput.value = '';
@@ -214,7 +391,6 @@
             }
 
             const textSpan = document.createElement('span');
-            // Check for ASCII art to apply monospace
             if (text.includes('█')) {
                 textSpan.style.fontFamily = 'monospace';
                 textSpan.style.display = 'block';
@@ -251,8 +427,19 @@
         }
 
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-        usernameInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value })));
-        colorInput.addEventListener('change', () => ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value })));
+        usernameInput.addEventListener('change', () => {
+            if (ws && isAuthenticated) {
+                ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value }));
+            }
+        });
+        colorInput.addEventListener('change', () => {
+            if (ws && isAuthenticated) {
+                ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
+            }
+        });
+
+        // Focus handling
+        document.getElementById('loginUsername').focus();
     </script>
 </body>
 </html>
