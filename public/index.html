@@ -17,7 +17,6 @@
             --success-color: #44ff44;
         }
 
-        /* Themes */
         body.theme-purple { --bg-color: #12001a; --panel-bg: #08000c; --text-color: #c48eff; --accent-color: #9d00ff; --header-bg: #1f002b; --input-bg: #16001f; --border-color: #58008c; }
         body.theme-blue { --bg-color: #051020; --panel-bg: #000510; --text-color: #b0e0ff; --accent-color: #0088ff; --header-bg: #001a36; --input-bg: #001225; --border-color: #003360; }
         body.theme-red { --bg-color: #1a0505; --panel-bg: #0a0000; --text-color: #ffb0b0; --accent-color: #ff0000; --header-bg: #360000; --input-bg: #250000; --border-color: #600000; }
@@ -36,15 +35,29 @@
 
         body { 
             font-family: 'Courier New', Courier, monospace; 
-            background: var(--bg-color); color: var(--text-color);
-            margin: 0; padding: 20px; display: flex; flex-direction: column; 
-            height: 100vh; box-sizing: border-box; transition: background 0.5s, color 0.5s;
+            background: var(--bg-color); 
+            color: var(--text-color);
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            box-sizing: border-box; 
+            transition: background 0.5s, color 0.5s;
         }
 
         #login-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg-color); z-index: 1000;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: var(--bg-color); 
+            z-index: 1000;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
             gap: 20px;
         }
 
@@ -54,6 +67,7 @@
             border-radius: 10px;
             border: 2px solid var(--border-color);
             min-width: 350px;
+            box-shadow: 0 0 20px rgba(0,255,0,0.1);
         }
 
         .login-form h2 {
@@ -73,6 +87,12 @@
             font-family: inherit;
             border-radius: 4px;
             box-sizing: border-box;
+            font-size: 0.95em;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--accent-color);
         }
 
         .login-form button {
@@ -86,10 +106,16 @@
             cursor: pointer;
             border-radius: 4px;
             font-size: 1em;
+            transition: opacity 0.3s;
         }
 
         .login-form button:hover {
-            opacity: 0.9;
+            opacity: 0.8;
+        }
+
+        .login-form button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .error-msg {
@@ -98,32 +124,134 @@
             text-align: center;
             margin: 10px 0;
             display: none;
+            padding: 8px;
+            background: rgba(255, 68, 68, 0.1);
+            border-radius: 4px;
         }
         
         header {
-            display: flex; gap: 10px; padding-bottom: 15px; border-bottom: 1px solid var(--border-color);
-            margin-bottom: 10px; flex-wrap: wrap; align-items: center;
+            display: flex; 
+            gap: 10px; 
+            padding-bottom: 15px; 
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px; 
+            flex-wrap: wrap; 
+            align-items: center;
         }
 
-        .setting-group { display: flex; align-items: center; gap: 5px; background: var(--header-bg); padding: 5px 10px; border-radius: 4px; }
-        label { font-size: 0.8em; color: var(--text-color); opacity: 0.7; }
-        input[type="text"].settings-input { background: transparent; border: none; color: #fff; border-bottom: 1px solid #555; width: 100px; font-family: inherit; }
-        #chatTitle { flex: 2; text-align: center; font-weight: bold; font-size: 1.2em; color: var(--accent-color); text-shadow: 0 0 5px rgba(0,0,0,0.5); }
-        #chat-container { flex: 1; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; margin-bottom: 10px; background: var(--panel-bg); font-size: 0.9em; }
+        .setting-group { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            background: var(--header-bg); 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+        }
+        
+        label { 
+            font-size: 0.8em; 
+            color: var(--text-color); 
+            opacity: 0.7; 
+        }
+        
+        input[type="text"].settings-input { 
+            background: transparent; 
+            border: none; 
+            color: #fff; 
+            border-bottom: 1px solid #555; 
+            width: 100px; 
+            font-family: inherit; 
+        }
+        
+        #chatTitle { 
+            flex: 2; 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 1.2em; 
+            color: var(--accent-color); 
+            text-shadow: 0 0 5px rgba(0,0,0,0.5); 
+        }
+        
+        #chat-container { 
+            flex: 1; 
+            overflow-y: auto; 
+            border: 1px solid var(--border-color); 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            background: var(--panel-bg); 
+            font-size: 0.9em; 
+        }
 
-        .message { margin-bottom: 5px; display: flex; justify-content: space-between; }
-        .message-content { flex: 1; white-space: pre-wrap; word-break: break-all; }
-        .system { color: #777; font-style: italic; font-size: 0.85em; }
-        .dm-msg { color: #ff00ff; border-left: 2px solid #ff00ff; padding-left: 5px; }
-        .timestamp { color: #666; font-size: 0.75em; margin-left: 10px; white-space: nowrap; }
+        .message { 
+            margin-bottom: 5px; 
+            display: flex; 
+            justify-content: space-between; 
+        }
+        
+        .message-content { 
+            flex: 1; 
+            white-space: pre-wrap; 
+            word-break: break-word; 
+        }
+        
+        .system { 
+            color: #777; 
+            font-style: italic; 
+            font-size: 0.85em; 
+        }
+        
+        .dm-msg { 
+            color: #ff00ff; 
+            border-left: 2px solid #ff00ff; 
+            padding-left: 5px; 
+        }
+        
+        .timestamp { 
+            color: #666; 
+            font-size: 0.75em; 
+            margin-left: 10px; 
+            white-space: nowrap; 
+        }
 
-        .db-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.8em; }
-        .db-table th, .db-table td { border: 1px solid #444; padding: 4px; text-align: left; }
-        .db-table th { background: #222; color: var(--accent-color); }
+        #input-area { 
+            display: flex; 
+            gap: 10px; 
+        }
+        
+        input#messageInput { 
+            flex: 1; 
+            padding: 12px; 
+            background: var(--input-bg); 
+            border: 1px solid var(--border-color); 
+            color: #fff; 
+            font-family: inherit; 
+            border-radius: 4px;
+        }
+        
+        input#messageInput:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        
+        button { 
+            padding: 10px 20px; 
+            background: var(--accent-color); 
+            color: #000; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+            border-radius: 4px; 
+        }
 
-        #input-area { display: flex; gap: 10px; }
-        input#messageInput { flex: 1; padding: 12px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; font-family: inherit; }
-        button { padding: 10px 20px; background: var(--accent-color); color: #000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        .link-text {
+            color: var(--accent-color);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .link-text:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -138,24 +266,24 @@
 
             <!-- Login Form -->
             <div id="loginForm">
-                <input type="text" id="loginUsername" placeholder="Username" required>
-                <input type="password" id="loginPassword" placeholder="Password" required>
-                <button onclick="attemptLogin()">LOGIN</button>
-                <div class="error-msg" id="loginError">Invalid credentials</div>
+                <input type="text" id="loginUsername" placeholder="Username" required autocomplete="username">
+                <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password">
+                <button id="loginBtn" onclick="attemptLogin()">LOGIN</button>
+                <div class="error-msg" id="loginError"></div>
                 <div style="text-align: center; margin-top: 15px;">
-                    <a href="#" onclick="showSignup()" style="color: var(--accent-color); text-decoration: underline; cursor: pointer;">Don't have account? Sign up</a>
+                    <a class="link-text" onclick="showSignup()">Don't have an account? Sign up</a>
                 </div>
             </div>
 
             <!-- Signup Form -->
             <div id="signupForm" style="display: none;">
-                <input type="text" id="signupUsername" placeholder="Username" maxlength="20" required>
-                <input type="password" id="signupPassword" placeholder="Password" required>
-                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" required>
-                <button onclick="attemptSignup()">CREATE ACCOUNT</button>
+                <input type="text" id="signupUsername" placeholder="Username (max 20 chars)" maxlength="20" required autocomplete="username">
+                <input type="password" id="signupPassword" placeholder="Password (min 4 chars)" required autocomplete="new-password">
+                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" required autocomplete="new-password">
+                <button id="signupBtn" onclick="attemptSignup()">CREATE ACCOUNT</button>
                 <div class="error-msg" id="signupError"></div>
                 <div style="text-align: center; margin-top: 15px;">
-                    <a href="#" onclick="showLogin()" style="color: var(--accent-color); text-decoration: underline; cursor: pointer;">Back to Login</a>
+                    <a class="link-text" onclick="showLogin()">Back to Login</a>
                 </div>
             </div>
         </div>
@@ -172,7 +300,7 @@
         </div>
         <div id="chatTitle">Classroom</div>
         <div style="flex:1; text-align: right; font-size: 0.8em;">
-            STATUS: <span id="status">Not Connected</span>
+            STATUS: <span id="status" style="color: var(--error-color);">Connecting...</span>
         </div>
     </header>
 
@@ -187,6 +315,8 @@
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host;
         let ws = null;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 5;
         
         const chatContainer = document.getElementById('chat-container');
         const messageInput = document.getElementById('messageInput');
@@ -199,12 +329,16 @@
 
         let isAdmin = false;
         let isAuthenticated = false;
+        let pendingAuthCommand = null;
 
         function showSignup() {
             document.getElementById('loginForm').style.display = 'none';
             document.getElementById('signupForm').style.display = 'block';
             document.getElementById('loginError').style.display = 'none';
             document.getElementById('signupError').style.display = 'none';
+            document.getElementById('signupUsername').value = '';
+            document.getElementById('signupPassword').value = '';
+            document.getElementById('signupConfirmPassword').value = '';
             document.getElementById('signupUsername').focus();
         }
 
@@ -213,6 +347,8 @@
             document.getElementById('loginForm').style.display = 'block';
             document.getElementById('loginError').style.display = 'none';
             document.getElementById('signupError').style.display = 'none';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
             document.getElementById('loginUsername').focus();
         }
 
@@ -221,15 +357,20 @@
             const password = document.getElementById('loginPassword').value;
             
             if (!username || !password) {
-                showError('loginError', 'Please fill all fields');
+                showError('loginError', 'Please fill in all fields');
                 return;
             }
 
-            // Send login command via WebSocket if connected, or connect first
+            document.getElementById('loginBtn').disabled = true;
+            document.getElementById('loginError').style.display = 'none';
+
+            const command = `/login ${username} ${password}`;
+            
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'message', content: `/login ${username} ${password}` }));
+                ws.send(JSON.stringify({ type: 'message', content: command }));
             } else {
-                connectToServer(username, password, 'login');
+                pendingAuthCommand = command;
+                connectWebSocket();
             }
         }
 
@@ -239,7 +380,7 @@
             const confirmPassword = document.getElementById('signupConfirmPassword').value;
             
             if (!username || !password || !confirmPassword) {
-                showError('signupError', 'Please fill all fields');
+                showError('signupError', 'Please fill in all fields');
                 return;
             }
             
@@ -253,10 +394,21 @@
                 return;
             }
 
+            if (username.length > 20) {
+                showError('signupError', 'Username must be 20 characters or less');
+                return;
+            }
+
+            document.getElementById('signupBtn').disabled = true;
+            document.getElementById('signupError').style.display = 'none';
+
+            const command = `/register ${username} ${password}`;
+            
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'message', content: `/register ${username} ${password}` }));
+                ws.send(JSON.stringify({ type: 'message', content: command }));
             } else {
-                connectToServer(username, password, 'register');
+                pendingAuthCommand = command;
+                connectWebSocket();
             }
         }
 
@@ -264,23 +416,29 @@
             const errorEl = document.getElementById(elementId);
             errorEl.textContent = message;
             errorEl.style.display = 'block';
+            
+            // Re-enable buttons
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('signupBtn').disabled = false;
         }
 
-        function connectToServer(username, password, authType) {
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+
             ws = new WebSocket(wsUrl);
             
             ws.onopen = () => {
-                statusSpan.textContent = "Connected - Authenticating...";
-                const command = authType === 'login' ? `/login ${username} ${password}` : `/register ${username} ${password}`;
-                ws.send(JSON.stringify({ type: 'message', content: command }));
+                console.log('✅ WebSocket connected');
+                statusSpan.textContent = 'Connected';
+                statusSpan.style.color = 'var(--success-color)';
+                reconnectAttempts = 0;
+
+                // Send pending auth command if exists
+                if (pendingAuthCommand) {
+                    ws.send(JSON.stringify({ type: 'message', content: pendingAuthCommand }));
+                    pendingAuthCommand = null;
+                }
             };
-
-            // Reuse the same message handler
-            setupWebSocketHandlers();
-        }
-
-        function setupWebSocketHandlers() {
-            if (!ws) return;
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
@@ -288,83 +446,105 @@
                 switch(data.type) {
                     case 'init':
                         usernameInput.value = data.username;
+                        colorInput.value = data.color;
                         isAuthenticated = data.authenticated;
                         if (isAuthenticated) {
-                            loginOverlay.style.display = 'none';
-                            inputArea.style.display = 'flex';
-                            usernameInput.disabled = false;
-                            colorInput.disabled = false;
-                            statusSpan.textContent = "Authenticated";
-                            statusSpan.style.color = "var(--success-color)";
+                            handleAuthSuccess();
                         }
                         break;
+
                     case 'auth_success':
-                        loginOverlay.style.display = 'none';
-                        inputArea.style.display = 'flex';
-                        usernameInput.disabled = false;
-                        colorInput.disabled = false;
-                        statusSpan.textContent = "Authenticated";
-                        statusSpan.style.color = "var(--success-color)";
+                        handleAuthSuccess();
                         break;
+
                     case 'auth_error':
                         showError(data.form === 'login' ? 'loginError' : 'signupError', data.message);
-                        statusSpan.textContent = "Auth Failed";
-                        statusSpan.style.color = "var(--error-color)";
                         break;
+
                     case 'system':
                         addMessage('system', data.content);
                         break;
+
                     case 'message':
                         renderChatMessage(data);
                         break;
-                    case 'dm':
-                        addMessage('dm', `${data.from} -> ${data.to}: ${data.content}`, null, data.color);
-                        break;
+
                     case 'history':
-                        chatContainer.innerHTML = '<div class="system">> Loading chat history...</div>';
                         data.content.forEach(msg => renderChatMessage(msg));
                         addMessage('system', '--- End of History ---');
                         break;
+
                     case 'theme':
                         applyTheme(data.theme);
                         break;
+
                     case 'title':
                         chatTitle.textContent = data.title;
                         break;
-                    case 'pong':
-                        const latency = Date.now() - data.startTime;
-                        addMessage('system', `Latency: ${latency}ms`);
-                        break;
+
                     case 'admin_granted':
                         isAdmin = true;
-                        addMessage('system', '🔐 Admin Access Unlocked.');
                         break;
+
                     case 'clear_history':
                         chatContainer.innerHTML = '';
-                        break;
-                    case 'database_view':
-                        renderDatabaseTable(data.data);
                         break;
                 }
             };
 
             ws.onclose = () => {
-                statusSpan.textContent = "Disconnected";
-                statusSpan.style.color = "var(--error-color)";
-                addMessage('system', '❌ Connection lost. Please refresh.');
-                loginOverlay.style.display = 'flex';
-                inputArea.style.display = 'none';
+                console.log('❌ WebSocket disconnected');
+                statusSpan.textContent = 'Disconnected';
+                statusSpan.style.color = 'var(--error-color)';
+                
+                if (isAuthenticated) {
+                    addMessage('system', '❌ Connection lost. Reconnecting...');
+                    attemptReconnect();
+                }
             };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function handleAuthSuccess() {
+            loginOverlay.style.display = 'none';
+            inputArea.style.display = 'flex';
+            usernameInput.disabled = true;
+            colorInput.disabled = false;
+            isAuthenticated = true;
+            statusSpan.textContent = 'Authenticated';
+            statusSpan.style.color = 'var(--success-color)';
+            messageInput.focus();
+            
+            // Re-enable buttons for potential future use
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('signupBtn').disabled = false;
+        }
+
+        function attemptReconnect() {
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                setTimeout(() => {
+                    console.log(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    connectWebSocket();
+                }, 2000 * reconnectAttempts);
+            } else {
+                addMessage('system', '❌ Failed to reconnect. Please refresh the page.');
+            }
         }
 
         function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text || !isAuthenticated) return;
-            if (text.toLowerCase() === '/cls') {
+            if (!text || !isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            if (text.toLowerCase() === '/cls' || text.toLowerCase() === '/clear') {
                 chatContainer.innerHTML = '';
                 messageInput.value = '';
                 return;
             }
+            
             ws.send(JSON.stringify({ type: 'message', content: text }));
             messageInput.value = '';
         }
@@ -383,18 +563,17 @@
 
             if (username) {
                 const nameSpan = document.createElement('span');
-                if (color === 'rainbow') nameSpan.className = 'rainbow-text';
-                else nameSpan.style.color = color || 'var(--accent-color)';
+                if (color === 'rainbow') {
+                    nameSpan.className = 'rainbow-text';
+                } else {
+                    nameSpan.style.color = color || 'var(--accent-color)';
+                }
                 nameSpan.style.fontWeight = 'bold';
                 nameSpan.textContent = `[${username}] `;
                 contentDiv.appendChild(nameSpan);
             }
 
             const textSpan = document.createElement('span');
-            if (text.includes('█')) {
-                textSpan.style.fontFamily = 'monospace';
-                textSpan.style.display = 'block';
-            }
             textSpan.textContent = text;
             contentDiv.appendChild(textSpan);
             div.appendChild(contentDiv);
@@ -410,36 +589,31 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function renderDatabaseTable(rows) {
-            let html = '<table class="db-table"><tr><th>ID</th><th>User</th><th>Msg</th><th>Time</th></tr>';
-            rows.forEach(r => {
-                html += `<tr><td>${r.id}</td><td>${r.username}</td><td>${r.content}</td><td>${new Date(r.timestamp).toLocaleString()}</td></tr>`;
-            });
-            html += '</table>';
-            const div = document.createElement('div');
-            div.innerHTML = `<strong>Database View (Last 100):</strong>` + html;
-            chatContainer.appendChild(div);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
         function applyTheme(theme) {
             document.body.className = theme !== 'default' ? `theme-${theme}` : '';
         }
 
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-        usernameInput.addEventListener('change', () => {
-            if (ws && isAuthenticated) {
-                ws.send(JSON.stringify({ type: 'update_name', content: usernameInput.value }));
-            }
+        messageInput.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') sendMessage(); 
         });
+
         colorInput.addEventListener('change', () => {
-            if (ws && isAuthenticated) {
+            if (ws && isAuthenticated && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
             }
         });
 
-        // Focus handling
-        document.getElementById('loginUsername').focus();
+        // Support Enter key for login/signup
+        document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') attemptLogin();
+        });
+
+        document.getElementById('signupConfirmPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') attemptSignup();
+        });
+
+        // Initialize connection
+        connectWebSocket();
     </script>
 </body>
 </html>
