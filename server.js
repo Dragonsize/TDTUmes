@@ -102,8 +102,6 @@ wss.on('connection', async (ws, req) => {
                 ws.send(JSON.stringify({ type: 'pong', startTime: data.startTime }));
             } else if (data.type === 'dm') {
                 handleDM(ws, data);
-            } else if (data.type === 'tdtu') {
-                handleTDTU(ws);
             }
         } catch (e) {
             console.error('Message parse error:', e);
@@ -135,11 +133,6 @@ async function handleCommand(ws, content) {
 
     if (cmd === '/m') {
         handleDM(ws, { target: parts[1], content: parts.slice(2).join(' ') });
-        return;
-    }
-
-    if (cmd === '/tdtu') {
-        handleTDTU(ws);
         return;
     }
 
@@ -201,15 +194,12 @@ async function handleCommand(ws, content) {
         case '/viewdatabase':
             try {
                 const res = await pool.query(
-                    'SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 50'
+                    'SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 100'
                 );
-                const tableView = res.rows.map(row => 
-                    `${String(row.id).padStart(3)} | ${String(row.username).padEnd(12)} | ${String(row.content).substring(0,40).padEnd(40)} | ${new Date(row.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`
-                ).join('\n') || 'Database empty';
-                
                 ws.send(JSON.stringify({ 
-                    type: 'system', 
-                    content: `📊 CURRENT CHAT DATABASE (50 newest):\n\`\`\`\n${tableView}\n\`\`\`\nTotal: ${res.rowCount} messages`
+                    type: 'database_view', 
+                    data: res.rows,
+                    total: res.rowCount 
                 }));
             } catch (err) {
                 console.error('View DB error:', err.message);
@@ -313,17 +303,6 @@ function handleDM(ws, data) {
             content: `👤 User '${targetName}' not found.`
         }));
     }
-}
-
-function handleTDTU(ws) {
-    const asciiArt = `████████╗██████╗ ████████╗██╗   ██╗
-╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██████╔╝   ██║   ╚██████╔╝
-   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝
-         #1 UNIVERSITY`;
-    saveAndBroadcast(ws.userData.username, ws.userData.color, asciiArt);
 }
 
 function broadcast(data) {
