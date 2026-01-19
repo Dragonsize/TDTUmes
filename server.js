@@ -8,18 +8,16 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Database setup with Neon/PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Test connection
 pool.connect((err, client, release) => {
     if (err) {
         console.error('Database connection error:', err.stack);
     } else {
-        console.log('Connected to Neon Database');
+        console.log('✅ Connected to Neon Database');
         release();
     }
 });
@@ -42,9 +40,8 @@ wss.on('connection', async (ws, req) => {
         isAdmin: false
     };
 
-    console.log(`Connection from ${ip}:${port}`);
+    console.log(`👤 Connection from ${ip}:${port}`);
 
-    // Send current chat history
     try {
         const res = await pool.query(
             'SELECT username, content, timestamp FROM current_chat ORDER BY timestamp ASC LIMIT $1',
@@ -56,7 +53,6 @@ wss.on('connection', async (ws, req) => {
         ws.send(JSON.stringify({ type: 'history', content: [] }));
     }
 
-    // Send initial state
     ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
     ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
     ws.send(JSON.stringify({
@@ -84,7 +80,6 @@ wss.on('connection', async (ws, req) => {
 
                 await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
 
-                // AI trigger
                 const lowerMsg = content.toLowerCase();
                 if (lowerMsg.startsWith('hey tdtuai') || lowerMsg.startsWith('hey tdtuAI')) {
                     const prompt = content.substring(10).trim() || 'Hello!';
@@ -109,13 +104,6 @@ wss.on('connection', async (ws, req) => {
                 handleDM(ws, data);
             } else if (data.type === 'tdtu') {
                 handleTDTU(ws);
-            } else if (data.type === 'admin_login') {
-                ws.userData.isAdmin = true;
-                ws.send(JSON.stringify({ type: 'admin_granted' }));
-                ws.send(JSON.stringify({
-                    type: 'system',
-                    content: 'ADMIN: /rainbow, /theme <name>, /chattitle <title>, /clearall, /viewdatabase, /archiveprune'
-                }));
             }
         } catch (e) {
             console.error('Message parse error:', e);
@@ -133,6 +121,12 @@ wss.on('connection', async (ws, req) => {
 async function handleCommand(ws, content) {
     const parts = content.split(' ');
     const cmd = parts[0].toLowerCase();
+
+    if (cmd === '/?') {
+        const publicCmds = '📋 PUBLIC: /ping /m <user> <msg> /tdtu /cls\n🔐 ADMIN: /admin@ /rainbow /theme <name> /chattitle <title> /clearall /viewdatabase /archiveprune';
+        ws.send(JSON.stringify({ type: 'system', content: publicCmds }));
+        return;
+    }
 
     if (cmd === '/ping') {
         ws.send(JSON.stringify({ type: 'pong', startTime: Date.now() }));
@@ -154,34 +148,33 @@ async function handleCommand(ws, content) {
         ws.send(JSON.stringify({ type: 'admin_granted' }));
         ws.send(JSON.stringify({
             type: 'system',
-            content: 'ADMIN: /rainbow, /theme <name>, /chattitle <title>, /clearall, /viewdatabase, /archiveprune'
+            content: '🔐 ADMIN: /rainbow /theme <name> /chattitle <title> /clearall /viewdatabase /archiveprune'
         }));
         return;
     }
 
     if (!ws.userData.isAdmin) {
-        ws.send(JSON.stringify({ type: 'system', content: 'Permission denied.' }));
+        ws.send(JSON.stringify({ type: 'system', content: '❌ Permission denied.' }));
         return;
     }
 
     switch (cmd) {
         case '/rainbow':
             ws.userData.color = 'rainbow';
-            ws.send(JSON.stringify({ type: 'system', content: 'Rainbow mode activated!' }));
+            ws.send(JSON.stringify({ type: 'system', content: '🌈 Rainbow mode activated!' }));
             break;
         case '/theme':
             currentTheme = parts[1] || 'default';
             broadcast(JSON.stringify({ type: 'theme', theme: currentTheme }));
-            broadcast(JSON.stringify({ type: 'system', content: `Theme changed to ${currentTheme}` }));
+            broadcast(JSON.stringify({ type: 'system', content: `🎨 Theme changed to ${currentTheme}` }));
             break;
         case '/chattitle':
             currentTitle = parts.slice(1).join(' ') || 'Classroom';
             broadcast(JSON.stringify({ type: 'title', title: currentTitle }));
-            broadcast(JSON.stringify({ type: 'system', content: `Title changed to: ${currentTitle}` }));
+            broadcast(JSON.stringify({ type: 'system', content: `📝 Title changed to: ${currentTitle}` }));
             break;
         case '/clearall':
             try {
-                // Move last 100 to archive
                 const currentRes = await pool.query('SELECT * FROM current_chat ORDER BY id DESC LIMIT 100');
                 for (const row of currentRes.rows) {
                     await pool.query(
@@ -189,7 +182,6 @@ async function handleCommand(ws, content) {
                         [row.username, row.content, row.timestamp]
                     );
                 }
-                // Keep only newest 500 in archive
                 await pool.query(`
                     DELETE FROM history_archive 
                     WHERE id NOT IN (
@@ -200,10 +192,10 @@ async function handleCommand(ws, content) {
                 `);
                 await pool.query('DELETE FROM current_chat');
                 broadcast(JSON.stringify({ type: 'clear_history' }));
-                broadcast(JSON.stringify({ type: 'system', content: 'Chat cleared. History archived.' }));
+                broadcast(JSON.stringify({ type: 'system', content: '🗑️ Chat cleared. History archived.' }));
             } catch (err) {
                 console.error('Clear error:', err);
-                ws.send(JSON.stringify({ type: 'system', content: 'Clear failed.' }));
+                ws.send(JSON.stringify({ type: 'system', content: '❌ Clear failed.' }));
             }
             break;
         case '/viewdatabase':
@@ -212,7 +204,7 @@ async function handleCommand(ws, content) {
                     'SELECT id, username, content, timestamp FROM current_chat ORDER BY id DESC LIMIT 50'
                 );
                 const tableView = res.rows.map(row => 
-                    `${row.id.padStart(3)} | ${row.username.padEnd(12)} | ${row.content.substring(0,40).padEnd(40)} | ${new Date(row.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`
+                    `${String(row.id).padStart(3)} | ${String(row.username).padEnd(12)} | ${String(row.content).substring(0,40).padEnd(40)} | ${new Date(row.timestamp).toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}`
                 ).join('\n') || 'Database empty';
                 
                 ws.send(JSON.stringify({ 
@@ -220,7 +212,8 @@ async function handleCommand(ws, content) {
                     content: `📊 CURRENT CHAT DATABASE (50 newest):\n\`\`\`\n${tableView}\n\`\`\`\nTotal: ${res.rowCount} messages`
                 }));
             } catch (err) {
-                ws.send(JSON.stringify({ type: 'system', content: 'Database view error.' }));
+                console.error('View DB error:', err.message);
+                ws.send(JSON.stringify({ type: 'system', content: `❌ Database error: ${err.message.substring(0,50)}` }));
             }
             break;
         case '/archiveprune':
@@ -228,13 +221,13 @@ async function handleCommand(ws, content) {
                 const deleted = await pool.query(
                     'DELETE FROM history_archive WHERE timestamp < NOW() - INTERVAL \'7 days\' RETURNING id'
                 );
-                ws.send(JSON.stringify({ type: 'system', content: `Archive pruned: ${deleted.rowCount} old messages removed.` }));
+                ws.send(JSON.stringify({ type: 'system', content: `📦 Archive pruned: ${deleted.rowCount} old messages removed.` }));
             } catch (err) {
-                ws.send(JSON.stringify({ type: 'system', content: 'Prune error.' }));
+                ws.send(JSON.stringify({ type: 'system', content: '❌ Prune error.' }));
             }
             break;
         default:
-            ws.send(JSON.stringify({ type: 'system', content: 'Unknown admin command.' }));
+            ws.send(JSON.stringify({ type: 'system', content: '❓ Unknown command. Type /?' }));
     }
 }
 
@@ -248,7 +241,6 @@ async function saveAndBroadcast(username, color, content) {
             [username, content, timestamp]
         );
         
-        // Archive management (keep 500 newest)
         await pool.query(`
             DELETE FROM history_archive 
             WHERE id NOT IN (
@@ -270,7 +262,7 @@ async function saveAndBroadcast(username, color, content) {
 
 async function asktdtuAI(userText) {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return 'AI unavailable (set GEMINI_API_KEY).';
+    if (!apiKey) return '🤖 AI unavailable (set GEMINI_API_KEY).';
     try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`;
         const payload = {
@@ -287,10 +279,10 @@ async function asktdtuAI(userText) {
         });
         if (!response.ok) throw new Error(`API error: ${response.status}`);
         const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "Hmm, not sure...";
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "🤔 Hmm, not sure...";
     } catch (error) {
         console.error('AI error:', error);
-        return 'AI error (check API key).';
+        return '🤖 AI error (check API key).';
     }
 }
 
@@ -318,7 +310,7 @@ function handleDM(ws, data) {
     } else {
         ws.send(JSON.stringify({
             type: 'system',
-            content: `User '${targetName}' not found.`
+            content: `👤 User '${targetName}' not found.`
         }));
     }
 }
@@ -349,5 +341,5 @@ function getRandomColor() {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 Server running on port ${PORT}`);
 });
