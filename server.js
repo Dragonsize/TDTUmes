@@ -11,7 +11,7 @@ const wss = new WebSocket.Server({ server });
 
 // Neon Database Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_15JexkdItWpX@ep-odd-flower-a1c35ldl-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
+    connectionString: process.env.DATABASE_URL || ,
     ssl: { rejectUnauthorized: false }
 });
 
