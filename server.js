@@ -11,7 +11,7 @@ const wss = new WebSocket.Server({ server });
 
 // Neon Database Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || ,
+    connectionString: process.env.DATABASE_URL ,
     ssl: { rejectUnauthorized: false }
 });
 
