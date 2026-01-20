@@ -11,7 +11,7 @@ const wss = new WebSocket.Server({ server });
 
 // Neon Database Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL ,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -264,20 +264,199 @@ async function handleCommand(ws, content) {
             type: 'system', 
             content: '🔐 Admin access granted.' 
         }));
-    } 
+    }
+    // TDTU COMMAND
+    else if (cmd === '/tdtu') {
+        const tdtuArt = `
+████████╗██████╗ ████████╗██╗   ██╗
+╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██║  ██║   ██║   ██║   ██║
+   ██║   ██████╔╝   ██║   ╚██████╔╝
+   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝ 
+Ton Duc Thang University
+        `.trim();
+        ws.send(JSON.stringify({ 
+            type: 'system', 
+            content: tdtuArt 
+        }));
+    }
+    // THEME COMMANDS (Admin only)
+    else if (cmd === '/theme' && ws.userData.isAdmin) {
+        const theme = parts[1]?.toLowerCase();
+        const validThemes = ['default', 'purple', 'blue', 'red'];
+        if (validThemes.includes(theme)) {
+            currentTheme = theme;
+            broadcast(JSON.stringify({ type: 'theme', theme }));
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: `✅ Theme changed to: ${theme}` 
+            }));
+        } else {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: `❌ Valid themes: ${validThemes.join(', ')}` 
+            }));
+        }
+    }
+    // TITLE COMMAND (Admin only)
+    else if (cmd === '/title' && ws.userData.isAdmin) {
+        const newTitle = parts.slice(1).join(' ');
+        if (newTitle) {
+            currentTitle = newTitle;
+            broadcast(JSON.stringify({ type: 'title', title: newTitle }));
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: `✅ Title changed to: ${newTitle}` 
+            }));
+        } else {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: '❌ Usage: /title <new title>' 
+            }));
+        }
+    }
+    // RAINBOW COLOR
+    else if (cmd === '/rainbow') {
+        ws.userData.color = 'rainbow';
+        ws.send(JSON.stringify({ 
+            type: 'system', 
+            content: '🌈 Rainbow mode activated!' 
+        }));
+    }
+    // DIRECT MESSAGE
+    else if (cmd === '/dm' || cmd === '/msg') {
+        const targetUser = parts[1];
+        const message = parts.slice(2).join(' ');
+        if (!targetUser || !message) {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: '❌ Usage: /dm <username> <message>' 
+            }));
+            return;
+        }
+        
+        let sent = false;
+        wss.clients.forEach(client => {
+            if (client.userData.username === targetUser && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify({
+                    type: 'dm',
+                    from: ws.userData.username,
+                    to: targetUser,
+                    content: message,
+                    color: ws.userData.color
+                }));
+                sent = true;
+            }
+        });
+        
+        if (sent) {
+            ws.send(JSON.stringify({
+                type: 'dm',
+                from: ws.userData.username,
+                to: targetUser,
+                content: message,
+                color: ws.userData.color
+            }));
+        } else {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: `❌ User '${targetUser}' not found or offline` 
+            }));
+        }
+    }
+    // USERS LIST
+    else if (cmd === '/users' || cmd === '/who') {
+        const onlineUsers = [];
+        wss.clients.forEach(client => {
+            if (client.userData.isLoggedIn) {
+                onlineUsers.push(client.userData.username);
+            }
+        });
+        ws.send(JSON.stringify({ 
+            type: 'system', 
+            content: `👥 Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}` 
+        }));
+    }
+    // PING
+    else if (cmd === '/ping') {
+        ws.send(JSON.stringify({ 
+            type: 'pong', 
+            startTime: Date.now() 
+        }));
+    }
     // CLEAR SCREEN
     else if (cmd === '/cls' || cmd === '/clear') {
         ws.send(JSON.stringify({ type: 'clear_history' }));
     }
+    // DATABASE VIEW (Admin only)
+    else if (cmd === '/db' && ws.userData.isAdmin) {
+        try {
+            const result = await pool.query(
+                'SELECT id, username, content, timestamp FROM current_chat ORDER BY timestamp DESC LIMIT 100'
+            );
+            ws.send(JSON.stringify({ 
+                type: 'database_view', 
+                data: result.rows 
+            }));
+        } catch (e) {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: '❌ Database query failed' 
+            }));
+        }
+    }
+    // ARCHIVE CHAT (Admin only)
+    else if (cmd === '/archive' && ws.userData.isAdmin) {
+        try {
+            // Copy current chat to archive
+            await pool.query(`
+                INSERT INTO history_archive (username, content, timestamp)
+                SELECT username, content, timestamp FROM current_chat
+            `);
+            
+            // Clear current chat
+            await pool.query('DELETE FROM current_chat');
+            
+            broadcast(JSON.stringify({ type: 'clear_history' }));
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: '✅ Chat archived and cleared' 
+            }));
+        } catch (e) {
+            ws.send(JSON.stringify({ 
+                type: 'system', 
+                content: '❌ Archive failed' 
+            }));
+        }
+    }
     // HELP
     else if (cmd === '/?') {
-        const helpText = `
-Available Commands:
-/login <user> <pass> - Login to account
-/register <user> <pass> - Create new account
+        const helpText = ws.userData.isAdmin ? `
+📋 Available Commands:
+/tdtu - Display TDTU logo
+/rainbow - Rainbow username color
+/dm <user> <msg> - Send direct message
+/users or /who - List online users
+/ping - Check connection latency
+/cls - Clear screen
+
+🔐 Admin Commands:
+/theme <name> - Change theme (default/purple/blue/red)
+/title <text> - Change chat title
+/db - View database
+/archive - Archive and clear chat
+        `.trim() : `
+📋 Available Commands:
+/tdtu - Display TDTU logo
+/rainbow - Rainbow username color
+/dm <user> <msg> - Send direct message
+/users or /who - List online users
+/ping - Check connection latency
 /cls - Clear screen
 /? - Show this help
         `.trim();
+        
         ws.send(JSON.stringify({ 
             type: 'system', 
             content: helpText 
