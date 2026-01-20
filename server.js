@@ -20,8 +20,8 @@ async function initDatabase() {
     try {
         // Test database connection
         const result = await pool.query('SELECT NOW()');
-        console.log(' Database connected successfully');
-        console.log(' Server time:', result.rows[0].now);
+        console.log('✅ Database connected successfully');
+        console.log('✅ Server time:', result.rows[0].now);
         
         // Verify tables exist
         const tablesCheck = await pool.query(`
@@ -31,7 +31,7 @@ async function initDatabase() {
             AND table_name IN ('users', 'current_chat')
         `);
         
-        console.log('Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
+        console.log('✅ Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
         
     } catch (err) {
         console.error('❌ Database connection error:', err);
@@ -99,7 +99,7 @@ wss.on('connection', async (ws, req) => {
 
     ws.on('close', () => {
         if (ws.userData.isLoggedIn) {
-            console.log(` ${ws.userData.username} disconnected`);
+            console.log(`👋 ${ws.userData.username} disconnected`);
             broadcast(JSON.stringify({ 
                 type: 'system', 
                 content: `${ws.userData.username} left.` 
@@ -171,7 +171,7 @@ async function handleCommand(ws, content) {
                 [username, hash, '']
             );
 
-            console.log(` New user registered: ${username}`);
+            console.log(`✅ New user registered: ${username}`);
 
             // Auto-login after registration
             await loginUser(ws, username);
@@ -231,7 +231,7 @@ async function handleCommand(ws, content) {
                 return;
             }
 
-            console.log(` User logged in: ${username}`);
+            console.log(`✅ User logged in: ${username}`);
 
             // Login successful
             await loginUser(ws, username);
@@ -290,7 +290,7 @@ Ton Duc Thang University
             broadcast(JSON.stringify({ type: 'theme', theme }));
             ws.send(JSON.stringify({ 
                 type: 'system', 
-                content: ` Theme changed to: ${theme}` 
+                content: `✅ Theme changed to: ${theme}` 
             }));
         } else {
             ws.send(JSON.stringify({ 
@@ -307,7 +307,7 @@ Ton Duc Thang University
             broadcast(JSON.stringify({ type: 'title', title: newTitle }));
             ws.send(JSON.stringify({ 
                 type: 'system', 
-                content: ` Title changed to: ${newTitle}` 
+                content: `✅ Title changed to: ${newTitle}` 
             }));
         } else {
             ws.send(JSON.stringify({ 
@@ -321,7 +321,7 @@ Ton Duc Thang University
         ws.userData.color = 'rainbow';
         ws.send(JSON.stringify({ 
             type: 'system', 
-            content: ' Rainbow mode activated!' 
+            content: '🌈 Rainbow mode activated!' 
         }));
     }
     // DIRECT MESSAGE
@@ -375,7 +375,7 @@ Ton Duc Thang University
         });
         ws.send(JSON.stringify({ 
             type: 'system', 
-            content: ` Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}` 
+            content: `👥 Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}` 
         }));
     }
     // PING
@@ -421,7 +421,7 @@ Ton Duc Thang University
             broadcast(JSON.stringify({ type: 'clear_history' }));
             ws.send(JSON.stringify({ 
                 type: 'system', 
-                content: ' Chat archived and cleared' 
+                content: '✅ Chat archived and cleared' 
             }));
         } catch (e) {
             ws.send(JSON.stringify({ 
@@ -433,7 +433,7 @@ Ton Duc Thang University
     // HELP
     else if (cmd === '/?') {
         const helpText = ws.userData.isAdmin ? `
- Available Commands:
+📋 Available Commands:
 /tdtu - Display TDTU logo
 /rainbow - Rainbow username color
 /dm <user> <msg> - Send direct message
@@ -441,13 +441,13 @@ Ton Duc Thang University
 /ping - Check connection latency
 /cls - Clear screen
 
- Admin Commands:
+🔐 Admin Commands:
 /theme <name> - Change theme (default/purple/blue/red)
 /title <text> - Change chat title
 /db - View database
 /archive - Archive and clear chat
         `.trim() : `
- Available Commands:
+📋 Available Commands:
 /tdtu - Display TDTU logo
 /rainbow - Rainbow username color
 /dm <user> <msg> - Send direct message
@@ -472,7 +472,7 @@ async function loginUser(ws, username) {
     // Send auth success
     ws.send(JSON.stringify({ 
         type: 'auth_success', 
-        message: ' Login successful!' 
+        message: '🔓 Login successful!' 
     }));
 
     // Send init data
@@ -542,8 +542,8 @@ const PORT = process.env.PORT || 3000;
 
 initDatabase().then(() => {
     server.listen(PORT, () => {
-        console.log(` Server running on port ${PORT}`);
-        console.log(` Database connected to Neon`);
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📊 Database connected to Neon`);
     });
 }).catch(err => {
     console.error('Failed to start server:', err);
