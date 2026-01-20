@@ -282,6 +282,62 @@
         .link-text:hover {
             text-decoration: underline;
         }
+
+        /* Database Modal */
+        #dbModal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            overflow: auto;
+        }
+
+        .db-modal-content {
+            background-color: var(--panel-bg);
+            margin: 5% auto;
+            padding: 20px;
+            border: 2px solid var(--border-color);
+            width: 90%;
+            max-width: 1200px;
+            border-radius: 10px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .db-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .db-modal-header h2 {
+            margin: 0;
+            color: var(--accent-color);
+        }
+
+        .close-modal {
+            color: var(--text-color);
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            line-height: 28px;
+        }
+
+        .close-modal:hover {
+            color: var(--accent-color);
+        }
     </style>
 </head>
 <body>
@@ -339,6 +395,17 @@
     <div id="input-area" style="display: none;">
         <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
         <button onclick="sendMessage()">SEND</button>
+    </div>
+
+    <!-- Database Modal -->
+    <div id="dbModal">
+        <div class="db-modal-content">
+            <div class="db-modal-header">
+                <h2>Database View</h2>
+                <button class="close-modal" onclick="closeDbModal()">&times;</button>
+            </div>
+            <div id="dbTableContainer"></div>
+        </div>
     </div>
 
     <script>
@@ -521,12 +588,12 @@
                         break;
 
                     case 'database_view':
-                        renderDatabaseTable(data.data);
+                        openDbModal(data.data);
                         break;
 
                     case 'pong':
                         const latency = Date.now() - data.startTime;
-                        addMessage('system', `🏓 Pong! Latency: ${latency}ms`);
+                        addMessage('system', `Pong! Latency: ${latency}ms`);
                         break;
 
                     case 'dm':
@@ -639,28 +706,48 @@
             document.body.className = theme !== 'default' ? `theme-${theme}` : '';
         }
 
-        function renderDatabaseTable(rows) {
-            const container = document.createElement('div');
-            container.className = 'db-container';
+        function openDbModal(rows) {
+            const modal = document.getElementById('dbModal');
+            const container = document.getElementById('dbTableContainer');
             
             let html = '<table class="db-table"><thead><tr><th>ID</th><th>Username</th><th>Content</th><th>Timestamp</th></tr></thead><tbody>';
             
-            rows.forEach(row => {
-                const time = new Date(row.timestamp).toLocaleString();
-                const content = row.content.length > 50 ? row.content.substring(0, 50) + '...' : row.content;
-                html += `<tr>
-                    <td>${row.id}</td>
-                    <td>${row.username}</td>
-                    <td>${content}</td>
-                    <td>${time}</td>
-                </tr>`;
-            });
+            if (rows.length === 0) {
+                html += '<tr><td colspan="4" style="text-align: center; padding: 20px;">No messages in database</td></tr>';
+            } else {
+                rows.forEach(row => {
+                    const time = new Date(row.timestamp).toLocaleString();
+                    const content = escapeHtml(row.content);
+                    html += `<tr>
+                        <td>${row.id}</td>
+                        <td>${escapeHtml(row.username)}</td>
+                        <td>${content}</td>
+                        <td>${time}</td>
+                    </tr>`;
+                });
+            }
             
             html += '</tbody></table>';
-            container.innerHTML = '<div class="system" style="font-weight: bold; margin-bottom: 5px;">📊 Database View (Last 100 messages):</div>' + html;
-            
-            chatContainer.appendChild(container);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            container.innerHTML = html;
+            modal.style.display = 'block';
+        }
+
+        function closeDbModal() {
+            document.getElementById('dbModal').style.display = 'none';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('dbModal');
+            if (event.target === modal) {
+                closeDbModal();
+            }
         }
 
         messageInput.addEventListener('keypress', (e) => { 
