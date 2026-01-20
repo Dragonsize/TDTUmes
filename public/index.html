@@ -243,6 +243,36 @@
             border-radius: 4px; 
         }
 
+        .db-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px; 
+            font-size: 0.8em; 
+            background: var(--panel-bg);
+        }
+        
+        .db-table th, .db-table td { 
+            border: 1px solid var(--border-color); 
+            padding: 6px; 
+            text-align: left; 
+        }
+        
+        .db-table th { 
+            background: var(--header-bg); 
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .db-table td {
+            color: var(--text-color);
+        }
+
+        .db-container {
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
         .link-text {
             color: var(--accent-color);
             text-decoration: none;
@@ -489,6 +519,22 @@
                     case 'clear_history':
                         chatContainer.innerHTML = '';
                         break;
+
+                    case 'database_view':
+                        renderDatabaseTable(data.data);
+                        break;
+
+                    case 'pong':
+                        const latency = Date.now() - data.startTime;
+                        addMessage('system', `🏓 Pong! Latency: ${latency}ms`);
+                        break;
+
+                    case 'dm':
+                        const dmMsg = data.from === usernameInput.value 
+                            ? `[DM to ${data.to}] ${data.content}`
+                            : `[DM from ${data.from}] ${data.content}`;
+                        addMessage('dm', dmMsg, null, data.color);
+                        break;
                 }
             };
 
@@ -591,6 +637,30 @@
 
         function applyTheme(theme) {
             document.body.className = theme !== 'default' ? `theme-${theme}` : '';
+        }
+
+        function renderDatabaseTable(rows) {
+            const container = document.createElement('div');
+            container.className = 'db-container';
+            
+            let html = '<table class="db-table"><thead><tr><th>ID</th><th>Username</th><th>Content</th><th>Timestamp</th></tr></thead><tbody>';
+            
+            rows.forEach(row => {
+                const time = new Date(row.timestamp).toLocaleString();
+                const content = row.content.length > 50 ? row.content.substring(0, 50) + '...' : row.content;
+                html += `<tr>
+                    <td>${row.id}</td>
+                    <td>${row.username}</td>
+                    <td>${content}</td>
+                    <td>${time}</td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = '<div class="system" style="font-weight: bold; margin-bottom: 5px;">📊 Database View (Last 100 messages):</div>' + html;
+            
+            chatContainer.appendChild(container);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         messageInput.addEventListener('keypress', (e) => { 
