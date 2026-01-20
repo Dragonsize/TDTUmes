@@ -11,45 +11,30 @@ const wss = new WebSocket.Server({ server });
 
 // Neon Database Connection
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL ,
+    connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Initialize database tables
+// Initialize database - tables already exist in Neon, just verify connection
 async function initDatabase() {
     try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(20) UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                personal_note TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMP
-            );
+        // Test database connection
+        const result = await pool.query('SELECT NOW()');
+        console.log('✅ Database connected successfully');
+        console.log('✅ Server time:', result.rows[0].now);
+        
+        // Verify tables exist
+        const tablesCheck = await pool.query(`
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('users', 'current_chat')
         `);
         
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS current_chat (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(20) NOT NULL,
-                content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
+        console.log('✅ Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
         
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS history_archive (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(20) NOT NULL,
-                content TEXT NOT NULL,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        `);
-        
-        console.log('✅ Database tables ready');
     } catch (err) {
-        console.error('❌ Database init error:', err);
+        console.error('❌ Database connection error:', err);
         process.exit(1);
     }
 }
@@ -166,7 +151,7 @@ async function handleCommand(ws, content) {
         try {
             // Check if username exists
             const check = await pool.query(
-                'SELECT id FROM users WHERE username = $1', 
+                'SELECT username FROM users WHERE username = $1', 
                 [username]
             );
             
@@ -182,8 +167,8 @@ async function handleCommand(ws, content) {
             // Hash password and create user
             const hash = await bcrypt.hash(password, 10);
             await pool.query(
-                'INSERT INTO users (username, password_hash, last_login) VALUES ($1, $2, CURRENT_TIMESTAMP)', 
-                [username, hash]
+                'INSERT INTO users (username, password_hash, personal_note) VALUES ($1, $2, $3)', 
+                [username, hash, '']
             );
 
             console.log(`✅ New user registered: ${username}`);
@@ -219,7 +204,7 @@ async function handleCommand(ws, content) {
         try {
             // Get user from database
             const userRes = await pool.query(
-                'SELECT * FROM users WHERE username = $1', 
+                'SELECT username, password_hash FROM users WHERE username = $1', 
                 [username]
             );
 
@@ -245,12 +230,6 @@ async function handleCommand(ws, content) {
                 }));
                 return;
             }
-
-            // Update last login
-            await pool.query(
-                'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE username = $1', 
-                [username]
-            );
 
             console.log(`✅ User logged in: ${username}`);
 
