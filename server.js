@@ -116,6 +116,8 @@ async function handleCommand(ws, content) {
     const parts = content.split(' ');
     const cmd = parts[0].toLowerCase();
     
+    console.log(`Command received: ${cmd} from ${ws.userData.username || 'anonymous'}`);
+    
     // REGISTRATION
     if (cmd === '/register') {
         const username = parts[1]?.trim();
