@@ -1,551 +1,689 @@
-const express = require('express');
-const http = require('http');
-const WebSocket = require('ws');
-const path = require('path');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TDTU Messenger</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #000;
+            --text-color: #ccc;
+            --accent-color: #00ff00;
+            --header-bg: #2a2a2a;
+            --input-bg: #222;
+            --border-color: #333;
+            --error-color: #ff4444;
+            --success-color: #44ff44;
+        }
 
-const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+        body.theme-purple { --bg-color: #12001a; --panel-bg: #08000c; --text-color: #c48eff; --accent-color: #9d00ff; --header-bg: #1f002b; --input-bg: #16001f; --border-color: #58008c; }
+        body.theme-blue { --bg-color: #051020; --panel-bg: #000510; --text-color: #b0e0ff; --accent-color: #0088ff; --header-bg: #001a36; --input-bg: #001225; --border-color: #003360; }
+        body.theme-red { --bg-color: #1a0505; --panel-bg: #0a0000; --text-color: #ffb0b0; --accent-color: #ff0000; --header-bg: #360000; --input-bg: #250000; --border-color: #600000; }
 
-// Neon Database Connection
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL ,
-    ssl: { rejectUnauthorized: false }
-});
+        @keyframes rainbow-anim {
+            0% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
+            14% { color: #ff7f00; text-shadow: 0 0 5px #ff7f00; }
+            28% { color: #ffff00; text-shadow: 0 0 5px #ffff00; }
+            42% { color: #00ff00; text-shadow: 0 0 5px #00ff00; }
+            57% { color: #0000ff; text-shadow: 0 0 5px #0000ff; }
+            71% { color: #4b0082; text-shadow: 0 0 5px #4b0082; }
+            85% { color: #9400d3; text-shadow: 0 0 5px #9400d3; }
+            100% { color: #ff0000; text-shadow: 0 0 5px #ff0000; }
+        }
+        .rainbow-text { animation: rainbow-anim 3s linear infinite; font-weight: bold; }
 
-// Initialize database - tables already exist in Neon, just verify connection
-async function initDatabase() {
-    try {
-        // Test database connection
-        const result = await pool.query('SELECT NOW()');
-        console.log('✅ Database connected successfully');
-        console.log('✅ Server time:', result.rows[0].now);
+        body { 
+            font-family: 'Courier New', Courier, monospace; 
+            background: var(--bg-color); 
+            color: var(--text-color);
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            box-sizing: border-box; 
+            transition: background 0.5s, color 0.5s;
+        }
+
+        #login-overlay {
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: var(--bg-color); 
+            z-index: 1000;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .login-form {
+            background: var(--panel-bg);
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid var(--border-color);
+            min-width: 350px;
+            box-shadow: 0 0 20px rgba(0,255,0,0.1);
+        }
+
+        .login-form h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px var(--accent-color);
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            font-family: inherit;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 0.95em;
+        }
+
+        .login-form input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .login-form button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: var(--accent-color);
+            color: #000;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 1em;
+            transition: opacity 0.3s;
+        }
+
+        .login-form button:hover {
+            opacity: 0.8;
+        }
+
+        .login-form button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            color: var(--error-color);
+            font-size: 0.9em;
+            text-align: center;
+            margin: 10px 0;
+            display: none;
+            padding: 8px;
+            background: rgba(255, 68, 68, 0.1);
+            border-radius: 4px;
+        }
         
-        // Verify tables exist
-        const tablesCheck = await pool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name IN ('users', 'current_chat')
-        `);
+        header {
+            display: flex; 
+            gap: 10px; 
+            padding-bottom: 15px; 
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 10px; 
+            flex-wrap: wrap; 
+            align-items: center;
+        }
+
+        .setting-group { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            background: var(--header-bg); 
+            padding: 5px 10px; 
+            border-radius: 4px; 
+        }
         
-        console.log('✅ Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
+        label { 
+            font-size: 0.8em; 
+            color: var(--text-color); 
+            opacity: 0.7; 
+        }
         
-    } catch (err) {
-        console.error('❌ Database connection error:', err);
-        process.exit(1);
-    }
-}
+        input[type="text"].settings-input { 
+            background: transparent; 
+            border: none; 
+            color: #fff; 
+            border-bottom: 1px solid #555; 
+            width: 100px; 
+            font-family: inherit; 
+        }
+        
+        #chatTitle { 
+            flex: 2; 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 1.2em; 
+            color: var(--accent-color); 
+            text-shadow: 0 0 5px rgba(0,0,0,0.5); 
+        }
+        
+        #chat-container { 
+            flex: 1; 
+            overflow-y: auto; 
+            border: 1px solid var(--border-color); 
+            padding: 10px; 
+            margin-bottom: 10px; 
+            background: var(--panel-bg); 
+            font-size: 0.9em; 
+        }
 
-app.use(express.static(path.join(__dirname, 'public')));
+        .message { 
+            margin-bottom: 5px; 
+            display: flex; 
+            justify-content: space-between; 
+        }
+        
+        .message-content { 
+            flex: 1; 
+            white-space: pre-wrap; 
+            word-break: break-word; 
+        }
+        
+        .system { 
+            color: #777; 
+            font-style: italic; 
+            font-size: 0.85em; 
+        }
+        
+        .dm-msg { 
+            color: #ff00ff; 
+            border-left: 2px solid #ff00ff; 
+            padding-left: 5px; 
+        }
+        
+        .timestamp { 
+            color: #666; 
+            font-size: 0.75em; 
+            margin-left: 10px; 
+            white-space: nowrap; 
+        }
 
-const HISTORY_LIMIT = 50;
-let currentTheme = 'default';
-let currentTitle = 'Classroom';
+        #input-area { 
+            display: flex; 
+            gap: 10px; 
+        }
+        
+        input#messageInput { 
+            flex: 1; 
+            padding: 12px; 
+            background: var(--input-bg); 
+            border: 1px solid var(--border-color); 
+            color: #fff; 
+            font-family: inherit; 
+            border-radius: 4px;
+        }
+        
+        input#messageInput:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        
+        button { 
+            padding: 10px 20px; 
+            background: var(--accent-color); 
+            color: #000; 
+            border: none; 
+            font-weight: bold; 
+            cursor: pointer; 
+            border-radius: 4px; 
+        }
 
-wss.on('connection', async (ws, req) => {
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    ws.userData = { 
-        username: '', 
-        color: '#00ff00', 
-        ip, 
-        isAdmin: false, 
-        isLoggedIn: false 
-    };
+        .db-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 10px; 
+            font-size: 0.8em; 
+            background: var(--panel-bg);
+        }
+        
+        .db-table th, .db-table td { 
+            border: 1px solid var(--border-color); 
+            padding: 6px; 
+            text-align: left; 
+        }
+        
+        .db-table th { 
+            background: var(--header-bg); 
+            color: var(--accent-color);
+            font-weight: bold;
+        }
 
-    console.log(`🔌 New connection from ${ip}`);
+        .db-table td {
+            color: var(--text-color);
+        }
 
-    // Initial state sync
-    ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
-    ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
-    ws.send(JSON.stringify({ type: 'system', content: '🔐 Welcome! Please login or register.' }));
+        .db-container {
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
 
-    ws.on('message', async (message) => {
-        try {
-            const data = JSON.parse(message.toString());
+        .link-text {
+            color: var(--accent-color);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .link-text:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div class="login-form">
+            <h2>🔐 TDTU MESSENGER</h2>
             
-            if (data.type === 'message') {
-                const content = data.content.trim();
-                
-                if (content.startsWith('/')) {
-                    await handleCommand(ws, content);
-                } else if (ws.userData.isLoggedIn) {
-                    await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
-                } else {
-                    ws.send(JSON.stringify({ 
-                        type: 'system', 
-                        content: '❌ Please login first.' 
-                    }));
+            <div style="text-align: center; color: #888; font-size: 0.9em; margin-bottom: 20px;">
+                Secure login required
+            </div>
+
+            <!-- Login Form -->
+            <div id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required autocomplete="username">
+                <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password">
+                <button id="loginBtn" onclick="attemptLogin()">LOGIN</button>
+                <div class="error-msg" id="loginError"></div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a class="link-text" onclick="showSignup()">Don't have an account? Sign up</a>
+                </div>
+            </div>
+
+            <!-- Signup Form -->
+            <div id="signupForm" style="display: none;">
+                <input type="text" id="signupUsername" placeholder="Username (max 20 chars)" maxlength="20" required autocomplete="username">
+                <input type="password" id="signupPassword" placeholder="Password (min 4 chars)" required autocomplete="new-password">
+                <input type="password" id="signupConfirmPassword" placeholder="Confirm Password" required autocomplete="new-password">
+                <button id="signupBtn" onclick="attemptSignup()">CREATE ACCOUNT</button>
+                <div class="error-msg" id="signupError"></div>
+                <div style="text-align: center; margin-top: 15px;">
+                    <a class="link-text" onclick="showLogin()">Back to Login</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <header>
+        <div class="setting-group">
+            <label>NAME:</label>
+            <input type="text" id="usernameInput" class="settings-input" disabled>
+        </div>
+        <div class="setting-group">
+            <label>COLOR:</label>
+            <input type="color" id="colorInput" value="#00ff00" disabled>
+        </div>
+        <div id="chatTitle">Classroom</div>
+        <div style="flex:1; text-align: right; font-size: 0.8em;">
+            STATUS: <span id="status" style="color: var(--error-color);">Connecting...</span>
+        </div>
+    </header>
+
+    <div id="chat-container"></div>
+
+    <div id="input-area" style="display: none;">
+        <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
+        <button onclick="sendMessage()">SEND</button>
+    </div>
+
+    <script>
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = protocol + '//' + window.location.host;
+        let ws = null;
+        let reconnectAttempts = 0;
+        let maxReconnectAttempts = 5;
+        
+        const chatContainer = document.getElementById('chat-container');
+        const messageInput = document.getElementById('messageInput');
+        const usernameInput = document.getElementById('usernameInput');
+        const colorInput = document.getElementById('colorInput');
+        const statusSpan = document.getElementById('status');
+        const chatTitle = document.getElementById('chatTitle');
+        const loginOverlay = document.getElementById('login-overlay');
+        const inputArea = document.getElementById('input-area');
+
+        let isAdmin = false;
+        let isAuthenticated = false;
+        let pendingAuthCommand = null;
+
+        function showSignup() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('signupForm').style.display = 'block';
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('signupError').style.display = 'none';
+            document.getElementById('signupUsername').value = '';
+            document.getElementById('signupPassword').value = '';
+            document.getElementById('signupConfirmPassword').value = '';
+            document.getElementById('signupUsername').focus();
+        }
+
+        function showLogin() {
+            document.getElementById('signupForm').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('signupError').style.display = 'none';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginUsername').focus();
+        }
+
+        function attemptLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            
+            if (!username || !password) {
+                showError('loginError', 'Please fill in all fields');
+                return;
+            }
+
+            document.getElementById('loginBtn').disabled = true;
+            document.getElementById('loginError').style.display = 'none';
+
+            const command = `/login ${username} ${password}`;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'message', content: command }));
+            } else {
+                pendingAuthCommand = command;
+                connectWebSocket();
+            }
+        }
+
+        function attemptSignup() {
+            const username = document.getElementById('signupUsername').value.trim();
+            const password = document.getElementById('signupPassword').value;
+            const confirmPassword = document.getElementById('signupConfirmPassword').value;
+            
+            if (!username || !password || !confirmPassword) {
+                showError('signupError', 'Please fill in all fields');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                showError('signupError', 'Passwords do not match');
+                return;
+            }
+            
+            if (password.length < 4) {
+                showError('signupError', 'Password must be at least 4 characters');
+                return;
+            }
+
+            if (username.length > 20) {
+                showError('signupError', 'Username must be 20 characters or less');
+                return;
+            }
+
+            document.getElementById('signupBtn').disabled = true;
+            document.getElementById('signupError').style.display = 'none';
+
+            const command = `/register ${username} ${password}`;
+            
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'message', content: command }));
+            } else {
+                pendingAuthCommand = command;
+                connectWebSocket();
+            }
+        }
+
+        function showError(elementId, message) {
+            const errorEl = document.getElementById(elementId);
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+            
+            // Re-enable buttons
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('signupBtn').disabled = false;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('✅ WebSocket connected');
+                statusSpan.textContent = 'Connected';
+                statusSpan.style.color = 'var(--success-color)';
+                reconnectAttempts = 0;
+
+                // Send pending auth command if exists
+                if (pendingAuthCommand) {
+                    ws.send(JSON.stringify({ type: 'message', content: pendingAuthCommand }));
+                    pendingAuthCommand = null;
                 }
-            } else if (data.type === 'update_color' && ws.userData.isLoggedIn) {
-                ws.userData.color = data.content;
-            } else if (data.type === 'update_name' && ws.userData.isLoggedIn) {
-                // Prevent username changes after login for security
-                ws.send(JSON.stringify({ 
-                    type: 'system', 
-                    content: '⚠️ Cannot change username while logged in.' 
-                }));
-            }
-        } catch (e) {
-            console.error('WS Error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '❌ Invalid message format' 
-            }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch(data.type) {
+                    case 'init':
+                        usernameInput.value = data.username;
+                        colorInput.value = data.color;
+                        isAuthenticated = data.authenticated;
+                        if (isAuthenticated) {
+                            handleAuthSuccess();
+                        }
+                        break;
+
+                    case 'auth_success':
+                        handleAuthSuccess();
+                        break;
+
+                    case 'auth_error':
+                        showError(data.form === 'login' ? 'loginError' : 'signupError', data.message);
+                        break;
+
+                    case 'system':
+                        addMessage('system', data.content);
+                        break;
+
+                    case 'message':
+                        renderChatMessage(data);
+                        break;
+
+                    case 'history':
+                        data.content.forEach(msg => renderChatMessage(msg));
+                        addMessage('system', '--- End of History ---');
+                        break;
+
+                    case 'theme':
+                        applyTheme(data.theme);
+                        break;
+
+                    case 'title':
+                        chatTitle.textContent = data.title;
+                        break;
+
+                    case 'admin_granted':
+                        isAdmin = true;
+                        break;
+
+                    case 'clear_history':
+                        chatContainer.innerHTML = '';
+                        break;
+
+                    case 'database_view':
+                        renderDatabaseTable(data.data);
+                        break;
+
+                    case 'pong':
+                        const latency = Date.now() - data.startTime;
+                        addMessage('system', `🏓 Pong! Latency: ${latency}ms`);
+                        break;
+
+                    case 'dm':
+                        const dmMsg = data.from === usernameInput.value 
+                            ? `[DM to ${data.to}] ${data.content}`
+                            : `[DM from ${data.from}] ${data.content}`;
+                        addMessage('dm', dmMsg, null, data.color);
+                        break;
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('❌ WebSocket disconnected');
+                statusSpan.textContent = 'Disconnected';
+                statusSpan.style.color = 'var(--error-color)';
+                
+                if (isAuthenticated) {
+                    addMessage('system', '❌ Connection lost. Reconnecting...');
+                    attemptReconnect();
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
         }
-    });
 
-    ws.on('close', () => {
-        if (ws.userData.isLoggedIn) {
-            console.log(`👋 ${ws.userData.username} disconnected`);
-            broadcast(JSON.stringify({ 
-                type: 'system', 
-                content: `${ws.userData.username} left.` 
-            }));
-        }
-    });
-
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-    });
-});
-
-async function handleCommand(ws, content) {
-    const parts = content.split(' ');
-    const cmd = parts[0].toLowerCase();
-    
-    // REGISTRATION
-    if (cmd === '/register') {
-        const username = parts[1]?.trim();
-        const password = parts.slice(2).join(' '); // Support passwords with spaces
-        
-        if (!username || !password) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: '❌ Usage: /register <username> <password>' 
-            }));
-            return;
-        }
-
-        if (username.length > 20) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: '❌ Username must be 20 characters or less' 
-            }));
-            return;
-        }
-
-        if (password.length < 4) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: '❌ Password must be at least 4 characters' 
-            }));
-            return;
-        }
-
-        try {
-            // Check if username exists
-            const check = await pool.query(
-                'SELECT username FROM users WHERE username = $1', 
-                [username]
-            );
+        function handleAuthSuccess() {
+            loginOverlay.style.display = 'none';
+            inputArea.style.display = 'flex';
+            usernameInput.disabled = true;
+            colorInput.disabled = false;
+            isAuthenticated = true;
+            statusSpan.textContent = 'Authenticated';
+            statusSpan.style.color = 'var(--success-color)';
+            messageInput.focus();
             
-            if (check.rows.length > 0) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'signup',
-                    message: '❌ Username already taken' 
-                }));
-                return;
-            }
-
-            // Hash password and create user
-            const hash = await bcrypt.hash(password, 10);
-            await pool.query(
-                'INSERT INTO users (username, password_hash, personal_note) VALUES ($1, $2, $3)', 
-                [username, hash, '']
-            );
-
-            console.log(`✅ New user registered: ${username}`);
-
-            // Auto-login after registration
-            await loginUser(ws, username);
-
-        } catch (e) {
-            console.error('Registration error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: '❌ Registration failed. Please try again.' 
-            }));
-        }
-        return;
-    }
-
-    // LOGIN
-    if (cmd === '/login') {
-        const username = parts[1]?.trim();
-        const password = parts.slice(2).join(' '); // Support passwords with spaces
-        
-        if (!username || !password) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'login',
-                message: '❌ Usage: /login <username> <password>' 
-            }));
-            return;
+            // Re-enable buttons for potential future use
+            document.getElementById('loginBtn').disabled = false;
+            document.getElementById('signupBtn').disabled = false;
         }
 
-        try {
-            // Get user from database
-            const userRes = await pool.query(
-                'SELECT username, password_hash FROM users WHERE username = $1', 
-                [username]
-            );
-
-            if (userRes.rows.length === 0) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'login',
-                    message: '❌ Invalid username or password' 
-                }));
-                return;
+        function attemptReconnect() {
+            if (reconnectAttempts < maxReconnectAttempts) {
+                reconnectAttempts++;
+                setTimeout(() => {
+                    console.log(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    connectWebSocket();
+                }, 2000 * reconnectAttempts);
+            } else {
+                addMessage('system', '❌ Failed to reconnect. Please refresh the page.');
             }
+        }
 
-            const user = userRes.rows[0];
-
-            // Verify password
-            const validPassword = await bcrypt.compare(password, user.password_hash);
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) return;
             
-            if (!validPassword) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'login',
-                    message: '❌ Invalid username or password' 
-                }));
+            if (text.toLowerCase() === '/cls' || text.toLowerCase() === '/clear') {
+                chatContainer.innerHTML = '';
+                messageInput.value = '';
                 return;
             }
-
-            console.log(`✅ User logged in: ${username}`);
-
-            // Login successful
-            await loginUser(ws, username);
-
-        } catch (e) {
-            console.error('Login error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'login',
-                message: '❌ Login failed. Please try again.' 
-            }));
+            
+            ws.send(JSON.stringify({ type: 'message', content: text }));
+            messageInput.value = '';
         }
-        return;
-    }
 
-    // Commands that require login
-    if (!ws.userData.isLoggedIn) {
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: '❌ Please login first.' 
-        }));
-        return;
-    }
-    
-    // ADMIN ACCESS
-    if (cmd === '/admin@') {
-        ws.userData.isAdmin = true;
-        ws.send(JSON.stringify({ type: 'admin_granted' }));
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: '🔐 Admin access granted.' 
-        }));
-    }
-    // TDTU COMMAND
-    else if (cmd === '/tdtu') {
-        const tdtuArt = `
-████████╗██████╗ ████████╗██╗   ██╗
-╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██████╔╝   ██║   ╚██████╔╝
-   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝ 
-Ton Duc Thang University
-        `.trim();
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: tdtuArt 
-        }));
-    }
-    // THEME COMMANDS (Admin only)
-    else if (cmd === '/theme' && ws.userData.isAdmin) {
-        const theme = parts[1]?.toLowerCase();
-        const validThemes = ['default', 'purple', 'blue', 'red'];
-        if (validThemes.includes(theme)) {
-            currentTheme = theme;
-            broadcast(JSON.stringify({ type: 'theme', theme }));
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `✅ Theme changed to: ${theme}` 
-            }));
-        } else {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `❌ Valid themes: ${validThemes.join(', ')}` 
-            }));
+        function renderChatMessage(data) {
+            const time = new Date(data.timestamp).toLocaleTimeString();
+            addMessage('user', data.content, data.username, data.color, time);
         }
-    }
-    // TITLE COMMAND (Admin only)
-    else if (cmd === '/title' && ws.userData.isAdmin) {
-        const newTitle = parts.slice(1).join(' ');
-        if (newTitle) {
-            currentTitle = newTitle;
-            broadcast(JSON.stringify({ type: 'title', title: newTitle }));
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `✅ Title changed to: ${newTitle}` 
-            }));
-        } else {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '❌ Usage: /title <new title>' 
-            }));
+
+        function addMessage(type, text, username = null, color = null, timestamp = null) {
+            const div = document.createElement('div');
+            div.className = `message ${type === 'system' ? 'system' : (type === 'dm' ? 'dm-msg' : 'user-msg')}`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+
+            if (username) {
+                const nameSpan = document.createElement('span');
+                if (color === 'rainbow') {
+                    nameSpan.className = 'rainbow-text';
+                } else {
+                    nameSpan.style.color = color || 'var(--accent-color)';
+                }
+                nameSpan.style.fontWeight = 'bold';
+                nameSpan.textContent = `[${username}] `;
+                contentDiv.appendChild(nameSpan);
+            }
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = text;
+            contentDiv.appendChild(textSpan);
+            div.appendChild(contentDiv);
+
+            if (timestamp) {
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'timestamp';
+                timeSpan.textContent = timestamp;
+                div.appendChild(timeSpan);
+            }
+
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
-    }
-    // RAINBOW COLOR
-    else if (cmd === '/rainbow') {
-        ws.userData.color = 'rainbow';
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: '🌈 Rainbow mode activated!' 
-        }));
-    }
-    // DIRECT MESSAGE
-    else if (cmd === '/dm' || cmd === '/msg') {
-        const targetUser = parts[1];
-        const message = parts.slice(2).join(' ');
-        if (!targetUser || !message) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '❌ Usage: /dm <username> <message>' 
-            }));
-            return;
+
+        function applyTheme(theme) {
+            document.body.className = theme !== 'default' ? `theme-${theme}` : '';
         }
-        
-        let sent = false;
-        wss.clients.forEach(client => {
-            if (client.userData.username === targetUser && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: 'dm',
-                    from: ws.userData.username,
-                    to: targetUser,
-                    content: message,
-                    color: ws.userData.color
-                }));
-                sent = true;
+
+        function renderDatabaseTable(rows) {
+            const container = document.createElement('div');
+            container.className = 'db-container';
+            
+            let html = '<table class="db-table"><thead><tr><th>ID</th><th>Username</th><th>Content</th><th>Timestamp</th></tr></thead><tbody>';
+            
+            rows.forEach(row => {
+                const time = new Date(row.timestamp).toLocaleString();
+                const content = row.content.length > 50 ? row.content.substring(0, 50) + '...' : row.content;
+                html += `<tr>
+                    <td>${row.id}</td>
+                    <td>${row.username}</td>
+                    <td>${content}</td>
+                    <td>${time}</td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = '<div class="system" style="font-weight: bold; margin-bottom: 5px;">📊 Database View (Last 100 messages):</div>' + html;
+            
+            chatContainer.appendChild(container);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        messageInput.addEventListener('keypress', (e) => { 
+            if (e.key === 'Enter') sendMessage(); 
+        });
+
+        colorInput.addEventListener('change', () => {
+            if (ws && isAuthenticated && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'update_color', content: colorInput.value }));
             }
         });
-        
-        if (sent) {
-            ws.send(JSON.stringify({
-                type: 'dm',
-                from: ws.userData.username,
-                to: targetUser,
-                content: message,
-                color: ws.userData.color
-            }));
-        } else {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `❌ User '${targetUser}' not found or offline` 
-            }));
-        }
-    }
-    // USERS LIST
-    else if (cmd === '/users' || cmd === '/who') {
-        const onlineUsers = [];
-        wss.clients.forEach(client => {
-            if (client.userData.isLoggedIn) {
-                onlineUsers.push(client.userData.username);
-            }
+
+        // Support Enter key for login/signup
+        document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') attemptLogin();
         });
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: `👥 Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}` 
-        }));
-    }
-    // PING
-    else if (cmd === '/ping') {
-        ws.send(JSON.stringify({ 
-            type: 'pong', 
-            startTime: Date.now() 
-        }));
-    }
-    // CLEAR SCREEN
-    else if (cmd === '/cls' || cmd === '/clear') {
-        ws.send(JSON.stringify({ type: 'clear_history' }));
-    }
-    // DATABASE VIEW (Admin only)
-    else if (cmd === '/db' && ws.userData.isAdmin) {
-        try {
-            const result = await pool.query(
-                'SELECT id, username, content, timestamp FROM current_chat ORDER BY timestamp DESC LIMIT 100'
-            );
-            ws.send(JSON.stringify({ 
-                type: 'database_view', 
-                data: result.rows 
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '❌ Database query failed' 
-            }));
-        }
-    }
-    // ARCHIVE CHAT (Admin only)
-    else if (cmd === '/archive' && ws.userData.isAdmin) {
-        try {
-            // Copy current chat to archive
-            await pool.query(`
-                INSERT INTO history_archive (username, content, timestamp)
-                SELECT username, content, timestamp FROM current_chat
-            `);
-            
-            // Clear current chat
-            await pool.query('DELETE FROM current_chat');
-            
-            broadcast(JSON.stringify({ type: 'clear_history' }));
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '✅ Chat archived and cleared' 
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: '❌ Archive failed' 
-            }));
-        }
-    }
-    // HELP
-    else if (cmd === '/?') {
-        const helpText = ws.userData.isAdmin ? `
-📋 Available Commands:
-/tdtu - Display TDTU logo
-/rainbow - Rainbow username color
-/dm <user> <msg> - Send direct message
-/users or /who - List online users
-/ping - Check connection latency
-/cls - Clear screen
 
-🔐 Admin Commands:
-/theme <name> - Change theme (default/purple/blue/red)
-/title <text> - Change chat title
-/db - View database
-/archive - Archive and clear chat
-        `.trim() : `
-📋 Available Commands:
-/tdtu - Display TDTU logo
-/rainbow - Rainbow username color
-/dm <user> <msg> - Send direct message
-/users or /who - List online users
-/ping - Check connection latency
-/cls - Clear screen
-/? - Show this help
-        `.trim();
-        
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: helpText 
-        }));
-    }
-}
+        document.getElementById('signupConfirmPassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') attemptSignup();
+        });
 
-async function loginUser(ws, username) {
-    ws.userData.username = username;
-    ws.userData.isLoggedIn = true;
-    ws.userData.color = getRandomColor();
-
-    // Send auth success
-    ws.send(JSON.stringify({ 
-        type: 'auth_success', 
-        message: '🔓 Login successful!' 
-    }));
-
-    // Send init data
-    ws.send(JSON.stringify({ 
-        type: 'init', 
-        username, 
-        color: ws.userData.color, 
-        authenticated: true 
-    }));
-
-    // Load chat history
-    try {
-        const history = await pool.query(
-            'SELECT username, content, timestamp FROM current_chat ORDER BY timestamp ASC LIMIT $1', 
-            [HISTORY_LIMIT]
-        );
-        
-        ws.send(JSON.stringify({ 
-            type: 'history', 
-            content: history.rows 
-        }));
-    } catch (e) {
-        console.error('Error loading history:', e);
-    }
-
-    // Broadcast join message
-    broadcast(JSON.stringify({ 
-        type: 'system', 
-        content: `✅ ${username} joined the chat.` 
-    }));
-}
-
-async function saveAndBroadcast(username, color, content) {
-    const timestamp = new Date().toISOString();
-    
-    try {
-        await pool.query(
-            'INSERT INTO current_chat (username, content, timestamp) VALUES ($1, $2, $3)', 
-            [username, content, timestamp]
-        );
-        
-        broadcast(JSON.stringify({ 
-            type: 'message', 
-            username, 
-            color, 
-            content, 
-            timestamp 
-        }));
-    } catch (e) {
-        console.error('Error saving message:', e);
-    }
-}
-
-function broadcast(data) {
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.userData.isLoggedIn) {
-            client.send(data);
-        }
-    });
-}
-
-function getRandomColor() {
-    return `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`;
-}
-
-const PORT = process.env.PORT || 3000;
-
-initDatabase().then(() => {
-    server.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`📊 Database connected to Neon`);
-    });
-}).catch(err => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-});
+        // Initialize connection
+        connectWebSocket();
+    </script>
+</body>
+</html>
