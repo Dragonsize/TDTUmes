@@ -32,8 +32,8 @@ async function initDatabase() {
     try {
         // Test database connection
         const result = await pool.query('SELECT NOW()');
-        console.log('✅ Database connected successfully');
-        console.log('✅ Server time:', result.rows[0].now);
+        console.log('Database connected successfully');
+        console.log('Server time:', result.rows[0].now);
         
         // Verify tables exist
         const tablesCheck = await pool.query(`
@@ -43,7 +43,7 @@ async function initDatabase() {
             AND table_name IN ('users', 'current_chat')
         `);
         
-        console.log('✅ Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
+        console.log('Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
         
     } catch (err) {
         console.error('❌ Database connection error:', err);
@@ -110,7 +110,7 @@ wss.on('connection', async (ws, req) => {
 
     ws.on('close', () => {
         if (ws.userData.isLoggedIn) {
-            console.log(`👋 ${ws.userData.username} disconnected`);
+            console.log(` ${ws.userData.username} disconnected`);
             broadcast(JSON.stringify({ 
                 type: 'system', 
                 content: `${ws.userData.username} left.` 
@@ -127,7 +127,7 @@ async function handleCommand(ws, content) {
     const parts = content.split(' ');
     const cmd = parts[0].toLowerCase();
     
-    console.log(`📝 Command: ${cmd} from ${ws.userData.username || 'anonymous'}`);
+    console.log(` Command: ${cmd} from ${ws.userData.username || 'anonymous'}`);
     
     // REGISTRATION
     if (cmd === '/register') {
@@ -182,7 +182,7 @@ async function handleCommand(ws, content) {
                 [username, hash, '']
             );
 
-            console.log(`✅ New user registered: ${username}`);
+            console.log(`New user registered: ${username}`);
             await loginUser(ws, username);
 
         } catch (e) {
@@ -237,7 +237,7 @@ async function handleCommand(ws, content) {
                 return;
             }
 
-            console.log(`✅ User logged in: ${username}`);
+            console.log(`User logged in: ${username}`);
             await loginUser(ws, username);
 
         } catch (e) {
@@ -263,7 +263,7 @@ async function handleCommand(ws, content) {
     // NOTE COMMAND
     if (cmd === '/note') {
         const noteContent = parts.slice(1).join(' ');
-        console.log(`📝 Note command from ${ws.userData.username}: "${noteContent}"`);
+        console.log(` Note command from ${ws.userData.username}: "${noteContent}"`);
         
         try {
             if (!noteContent) {
@@ -324,14 +324,13 @@ async function handleCommand(ws, content) {
     if (cmd === '/profile' || cmd === '/me') {
         try {
             const result = await pool.query(
-                'SELECT username, personal_note FROM users WHERE username = $1',
+                'SELECT username FROM users WHERE username = $1',
                 [ws.userData.username]
             );
             
             const user = result.rows[0];
             const profile = `
 Profile: ${user.username}
-Note: ${user.personal_note || '(no note set)'}
 Color: ${ws.userData.color}
 Admin: ${ws.userData.isAdmin ? 'Yes' : 'No'}
             `.trim();
@@ -363,7 +362,7 @@ Admin: ${ws.userData.isAdmin ? 'Yes' : 'No'}
         
         try {
             const result = await pool.query(
-                'SELECT username, personal_note FROM users WHERE username = $1',
+                'SELECT username FROM users WHERE username = $1',
                 [targetUser]
             );
             
@@ -386,7 +385,6 @@ Admin: ${ws.userData.isAdmin ? 'Yes' : 'No'}
             
             const profile = `
 Profile: ${user.username}
-Note: ${user.personal_note || '(no note set)'}
 Status: ${isOnline ? 'Online' : 'Offline'}
             `.trim();
             
@@ -755,8 +753,8 @@ const PORT = process.env.PORT || 3000;
 
 initDatabase().then(() => {
     server.listen(PORT, () => {
-        console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`📊 Database connected to Neon`);
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Database connected to Neon`);
     });
 }).catch(err => {
     console.error('Failed to start server:', err);
