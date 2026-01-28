@@ -4,6 +4,8 @@ const WebSocket = require('ws');
 const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+let GoogleGenerativeAI;
+try { GoogleGenerativeAI = require('@google/generative-ai').GoogleGenerativeAI; } catch (e) { GoogleGenerativeAI = null; }
 
 const app = express();
 const server = http.createServer(app);
@@ -52,6 +54,30 @@ async function initDatabase() {
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+const genAI = (process.env.GEMINI_API_KEY && GoogleGenerativeAI)
+    ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    : null;
+
+app.post('/api/ai', async (req, res) => {
+    const { message } = req.body || {};
+    if (!message || typeof message !== 'string') {
+        return res.status(400).json({ reply: 'Please provide a message.' });
+    }
+    if (!genAI) {
+        return res.json({ reply: 'AI is not configured. Set GEMINI_API_KEY in the server environment to enable tdtuAI.' });
+    }
+    try {
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const result = await model.generateContent(message);
+        const text = result.response?.text?.() || 'No response from AI.';
+        res.json({ reply: text });
+    } catch (e) {
+        console.error('AI error:', e);
+        res.status(500).json({ reply: 'AI request failed. Please try again.' });
+    }
+});
 
 const HISTORY_LIMIT = 50;
 let currentTheme = 'default';

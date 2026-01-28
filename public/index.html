@@ -338,6 +338,75 @@
         .close-modal:hover {
             color: var(--accent-color);
         }
+
+        /* Tabs */
+        #tab-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+        .tab-btn {
+            padding: 8px 16px;
+            background: var(--header-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.9em;
+        }
+        .tab-btn:hover { border-color: var(--accent-color); color: var(--accent-color); }
+        .tab-btn.active { background: var(--accent-color); color: #000; border-color: var(--accent-color); }
+
+        #panels-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+        .tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+        .tab-panel.active { display: flex; }
+
+        /* AI Chatbot sub-tabs */
+        .ai-sub-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+        .ai-sub-btn { padding: 6px 12px; background: var(--header-bg); border: 1px solid var(--border-color); color: var(--text-color); cursor: pointer; border-radius: 4px; font-size: 0.85em; }
+        .ai-sub-btn:hover { border-color: var(--accent-color); }
+        .ai-sub-btn.active { background: var(--accent-color); color: #000; }
+        .ai-room-view, .ai-bot-view { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+        .ai-room-view.active, .ai-bot-view.active { display: flex; }
+        .ai-room-view #input-area { display: flex; }
+
+        /* Marketplace */
+        .marketplace-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; overflow-y: auto; flex: 1; padding: 8px 0; }
+        .item-card { background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; }
+        .item-card h4 { margin: 0 0 6px; color: var(--accent-color); font-size: 0.95em; }
+        .item-card .price { color: var(--success-color); font-weight: bold; }
+        .item-card .seller { color: #888; font-size: 0.8em; margin-top: 4px; }
+
+        /* Flashcard */
+        .flashcard-layout { display: flex; gap: 12px; flex: 1; min-height: 0; overflow: hidden; }
+        .deck-list { width: 200px; border-right: 1px solid var(--border-color); padding-right: 10px; overflow-y: auto; }
+        .deck-item { padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; border: 1px solid transparent; }
+        .deck-item:hover, .deck-item.selected { border-color: var(--accent-color); background: var(--header-bg); }
+        .deck-actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+        .card-study { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .flashcard { width: 100%; max-width: 400px; min-height: 180px; perspective: 1000px; cursor: pointer; }
+        .flashcard-inner { position: relative; width: 100%; height: 100%; min-height: 180px; transition: transform 0.5s; transform-style: preserve-3d; }
+        .flashcard.flipped .flashcard-inner { transform: rotateY(180deg); }
+        .flashcard-front, .flashcard-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 8px; text-align: center; }
+        .flashcard-back { transform: rotateY(180deg); }
+        .flashcard-nav { margin-top: 16px; display: flex; gap: 10px; }
+        .card-editor { flex: 1; overflow-y: auto; padding: 10px; }
+        .card-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; background: var(--header-bg); padding: 8px; border-radius: 4px; }
+        .card-row input { flex: 1; padding: 6px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; border-radius: 4px; font-size: 0.9em; }
+        .card-row button { padding: 4px 10px; font-size: 0.85em; }
+        .empty-deck { color: #666; text-align: center; padding: 40px 20px; }
+
+        /* AI Chatbot messages */
+        .ai-messages { flex: 1; overflow-y: auto; padding: 10px; }
+        .ai-msg { margin-bottom: 10px; padding: 8px 10px; border-radius: 6px; max-width: 85%; }
+        .ai-msg.user { margin-left: auto; background: var(--accent-color); color: #000; }
+        .ai-msg.bot { margin-right: auto; background: var(--header-bg); border: 1px solid var(--border-color); white-space: pre-wrap; word-break: break-word; }
+        .ai-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border-color); }
+        .ai-input input { flex: 1; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; border-radius: 4px; font-family: inherit; }
+        .ai-input input:focus { outline: none; border-color: var(--accent-color); }
     </style>
 </head>
 <body>
@@ -354,6 +423,9 @@
             <div id="loginForm">
                 <input type="text" id="loginUsername" placeholder="Username" required autocomplete="username">
                 <input type="password" id="loginPassword" placeholder="Password" required autocomplete="current-password">
+                <label style="display:flex;align-items:center;gap:8px;margin:10px 0;font-size:0.9em;cursor:pointer;">
+                    <input type="checkbox" id="rememberMe"> Remember me
+                </label>
                 <button id="loginBtn" onclick="attemptLogin()">LOGIN</button>
                 <div class="error-msg" id="loginError"></div>
                 <div style="text-align: center; margin-top: 15px;">
@@ -390,11 +462,80 @@
         </div>
     </header>
 
-    <div id="chat-container"></div>
+    <nav id="tab-bar">
+        <button class="tab-btn" data-tab="marketplace">Marketplace</button>
+        <button class="tab-btn" data-tab="flashcard">Flashcard</button>
+        <button class="tab-btn" data-tab="ai">AI Chatbot</button>
+    </nav>
 
-    <div id="input-area" style="display: none;">
-        <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
-        <button onclick="sendMessage()">SEND</button>
+    <div id="panels-wrapper">
+        <!-- Marketplace -->
+        <div id="marketplace-panel" class="tab-panel">
+            <div class="marketplace-grid" id="marketplaceGrid"></div>
+        </div>
+
+        <!-- Flashcard -->
+        <div id="flashcard-panel" class="tab-panel">
+            <div class="flashcard-layout">
+                <div class="deck-list">
+                    <div class="deck-actions">
+                        <input type="text" id="newDeckName" placeholder="New deck name" style="flex:1;min-width:100px;padding:6px;background:var(--input-bg);border:1px solid var(--border-color);color:#fff;border-radius:4px;">
+                        <button onclick="addDeck()">Add</button>
+                    </div>
+                    <div id="deckList"></div>
+                </div>
+                <div class="card-editor" id="cardEditor">
+                    <div class="empty-deck" id="emptyDeck">Select or create a deck</div>
+                    <div id="addCardForm" style="display:none;">
+                        <div class="card-row">
+                            <input id="cardFrontInput" placeholder="Front">
+                            <input id="cardBackInput" placeholder="Back">
+                            <button onclick="addCard()">Add card</button>
+                        </div>
+                        <button onclick="startStudy()" style="margin-bottom:10px;">Study</button>
+                    </div>
+                    <div id="cardList" style="display:none;"></div>
+                    <div id="studyView" style="display:none;">
+                        <div class="card-study">
+                            <div class="flashcard" id="flashcard" onclick="flipCard()">
+                                <div class="flashcard-inner">
+                                    <div class="flashcard-front" id="studyFront"></div>
+                                    <div class="flashcard-back" id="studyBack"></div>
+                                </div>
+                            </div>
+                            <div class="flashcard-nav">
+                                <button onclick="prevCard()">Prev</button>
+                                <span id="cardCounter">0/0</span>
+                                <button onclick="nextCard()">Next</button>
+                                <button onclick="exitStudy()">Exit</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Chatbot (Room + AI) -->
+        <div id="ai-chatbot-panel" class="tab-panel">
+            <div class="ai-sub-tabs">
+                <button class="ai-sub-btn active" data-sub="room">Room</button>
+                <button class="ai-sub-btn" data-sub="bot">AI</button>
+            </div>
+            <div class="ai-room-view active">
+                <div id="chat-container"></div>
+                <div id="input-area">
+                    <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
+                    <button onclick="sendMessage()">SEND</button>
+                </div>
+            </div>
+            <div class="ai-bot-view">
+                <div class="ai-messages" id="aiMessages"></div>
+                <div class="ai-input">
+                    <input type="text" id="aiMessageInput" placeholder="Ask tdtuAI..." autocomplete="off">
+                    <button onclick="sendAiMessage()">Send</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Database Modal -->
@@ -427,6 +568,165 @@
         let isAdmin = false;
         let isAuthenticated = false;
         let pendingAuthCommand = null;
+
+        // --- Cookies ---
+        function setCookie(name, value, days) {
+            let s = name + '=' + encodeURIComponent(value);
+            if (days) { var d = new Date(); d.setTime(d.getTime() + days * 86400000); s += '; expires=' + d.toUTCString(); }
+            s += '; path=/';
+            document.cookie = s;
+        }
+        function getCookie(name) {
+            const m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return m ? decodeURIComponent(m[2]) : '';
+        }
+
+        // --- Tabs ---
+        function switchTab(id) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === (id === 'ai' ? 'ai-chatbot-panel' : id + '-panel')));
+            setCookie('lastTab', id, 30);
+            if (id === 'marketplace') renderMarketplace();
+            if (id === 'flashcard') renderDeckList();
+            if (id === 'ai') switchAiSub(getCookie('aiSubTab') || 'room');
+        }
+        function switchAiSub(sub) {
+            document.querySelectorAll('.ai-sub-btn').forEach(b => b.classList.toggle('active', b.dataset.sub === sub));
+            document.querySelector('.ai-room-view').classList.toggle('active', sub === 'room');
+            document.querySelector('.ai-bot-view').classList.toggle('active', sub === 'bot');
+            setCookie('aiSubTab', sub, 30);
+            if (sub === 'bot') document.getElementById('aiMessageInput').focus();
+        }
+
+        // --- Marketplace ---
+        var MOCK_ITEMS = [
+            { id: 1, title: 'Calculus I Notes', price: 'Free', seller: 'senior_student' },
+            { id: 2, title: 'Programming 101 E-book', price: '5k', seller: 'cs_major' },
+            { id: 3, title: 'Physics Lab Report Template', price: 'Free', seller: 'lab_ta' },
+            { id: 4, title: 'English Grammar Cheat Sheet', price: '2k', seller: 'english_club' },
+            { id: 5, title: 'Old Textbook - OOP', price: '50k', seller: 'graduating' },
+            { id: 6, title: 'Past Exam Papers 2023', price: '10k', seller: 'smu' }
+        ];
+        function renderMarketplace() {
+            var el = document.getElementById('marketplaceGrid');
+            if (!el) return;
+            el.innerHTML = MOCK_ITEMS.map(function (it) {
+                return '<div class="item-card"><h4>' + escapeHtml(it.title) + '</h4><div class="price">' + escapeHtml(it.price) + '</div><div class="seller">' + escapeHtml(it.seller) + '</div></div>';
+            }).join('');
+        }
+
+        // --- Flashcard ---
+        var FLASHCARD_KEY = 'tdtumes_decks';
+        var selectedDeckId = null;
+        var studyIndex = 0;
+        var studyDeck = null;
+
+        function getDecks() { try { var d = JSON.parse(localStorage.getItem(FLASHCARD_KEY) || '{"decks":[]}'); return d.decks || []; } catch (e) { return []; } }
+        function saveDecks(decks) { localStorage.setItem(FLASHCARD_KEY, JSON.stringify({ decks: decks })); }
+
+        function addDeck() {
+            var name = (document.getElementById('newDeckName') || {}).value?.trim();
+            if (!name) return;
+            var decks = getDecks();
+            var id = 'd' + Date.now();
+            decks.push({ id: id, name: name, cards: [] });
+            saveDecks(decks);
+            (document.getElementById('newDeckName') || {}).value = '';
+            renderDeckList();
+            selectDeck(id);
+        }
+        function selectDeck(id) {
+            selectedDeckId = id;
+            studyDeck = null;
+            document.getElementById('emptyDeck').style.display = 'none';
+            document.getElementById('addCardForm').style.display = 'block';
+            document.getElementById('cardList').style.display = 'block';
+            document.getElementById('studyView').style.display = 'none';
+            document.querySelectorAll('.deck-item').forEach(function (e) { e.classList.toggle('selected', e.dataset.id === id); });
+            renderCardList();
+        }
+        function renderDeckList() {
+            var decks = getDecks();
+            var el = document.getElementById('deckList');
+            if (!el) return;
+            el.innerHTML = decks.map(function (d) { return '<div class="deck-item' + (d.id === selectedDeckId ? ' selected' : '') + '" data-id="' + escapeHtml(d.id) + '" onclick="selectDeck(\'' + d.id.replace(/'/g, "\\'") + '\')">' + escapeHtml(d.name) + ' (' + (d.cards ? d.cards.length : 0) + ')</div>'; }).join('');
+        }
+        function renderCardList() {
+            var decks = getDecks();
+            var d = decks.find(function (x) { return x.id === selectedDeckId; });
+            var el = document.getElementById('cardList');
+            if (!el) return;
+            if (!d || !d.cards || !d.cards.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+            el.style.display = 'block';
+            el.innerHTML = '<div style="margin-bottom:8px;">Cards:</div>' + d.cards.map(function (c, i) {
+                return '<div class="card-row"><input value="' + escapeHtml(c.front) + '" readonly><input value="' + escapeHtml(c.back) + '" readonly><button onclick="deleteCard(' + i + ')">Del</button></div>';
+            }).join('');
+        }
+        function addCard() {
+            var front = (document.getElementById('cardFrontInput') || {}).value?.trim();
+            var back = (document.getElementById('cardBackInput') || {}).value?.trim();
+            if (!front && !back) return;
+            var decks = getDecks();
+            var d = decks.find(function (x) { return x.id === selectedDeckId; });
+            if (!d) return;
+            if (!d.cards) d.cards = [];
+            d.cards.push({ front: front || '(blank)', back: back || '(blank)' });
+            saveDecks(decks);
+            (document.getElementById('cardFrontInput') || {}).value = '';
+            (document.getElementById('cardBackInput') || {}).value = '';
+            renderCardList();
+            renderDeckList();
+        }
+        function deleteCard(i) {
+            var decks = getDecks();
+            var d = decks.find(function (x) { return x.id === selectedDeckId; });
+            if (!d || !d.cards || !d.cards[i]) return;
+            d.cards.splice(i, 1);
+            saveDecks(decks);
+            renderCardList();
+            renderDeckList();
+        }
+        function startStudy() {
+            var decks = getDecks();
+            var d = decks.find(function (x) { return x.id === selectedDeckId; });
+            if (!d || !d.cards || !d.cards.length) return;
+            studyDeck = d;
+            studyIndex = 0;
+            document.getElementById('addCardForm').style.display = 'none';
+            document.getElementById('cardList').style.display = 'none';
+            document.getElementById('studyView').style.display = 'block';
+            document.getElementById('flashcard').classList.remove('flipped');
+            showStudyCard();
+        }
+        function showStudyCard() {
+            if (!studyDeck || !studyDeck.cards.length) return;
+            var c = studyDeck.cards[studyIndex];
+            var fc = document.getElementById('studyFront');
+            var bc = document.getElementById('studyBack');
+            if (fc) fc.textContent = c.front;
+            if (bc) bc.textContent = c.back;
+            var cc = document.getElementById('cardCounter');
+            if (cc) cc.textContent = (studyIndex + 1) + '/' + studyDeck.cards.length;
+        }
+        function flipCard() { document.getElementById('flashcard').classList.toggle('flipped'); }
+        function prevCard() {
+            if (!studyDeck || !studyDeck.cards.length) return;
+            studyIndex = (studyIndex - 1 + studyDeck.cards.length) % studyDeck.cards.length;
+            document.getElementById('flashcard').classList.remove('flipped');
+            showStudyCard();
+        }
+        function nextCard() {
+            if (!studyDeck || !studyDeck.cards.length) return;
+            studyIndex = (studyIndex + 1) % studyDeck.cards.length;
+            document.getElementById('flashcard').classList.remove('flipped');
+            showStudyCard();
+        }
+        function exitStudy() {
+            document.getElementById('studyView').style.display = 'none';
+            document.getElementById('addCardForm').style.display = 'block';
+            renderCardList();
+            if (studyDeck) { document.getElementById('cardList').style.display = studyDeck.cards && studyDeck.cards.length ? 'block' : 'none'; }
+        }
 
         function showSignup() {
             document.getElementById('loginForm').style.display = 'none';
@@ -623,15 +923,19 @@
 
         function handleAuthSuccess() {
             loginOverlay.style.display = 'none';
-            inputArea.style.display = 'flex';
             usernameInput.disabled = true;
             colorInput.disabled = false;
             isAuthenticated = true;
             statusSpan.textContent = 'Authenticated';
             statusSpan.style.color = 'var(--success-color)';
-            messageInput.focus();
-            
-            // Re-enable buttons for potential future use
+            if (document.getElementById('rememberMe')) {
+                if (document.getElementById('rememberMe').checked)
+                    setCookie('rememberUsername', document.getElementById('loginUsername').value, 365);
+                else setCookie('rememberUsername', '', -1);
+            }
+            var tab = getCookie('lastTab') || 'ai';
+            switchTab(tab);
+            if (tab === 'ai') { var s = getCookie('aiSubTab') || 'room'; (s === 'room' ? messageInput : document.getElementById('aiMessageInput')).focus(); }
             document.getElementById('loginBtn').disabled = false;
             document.getElementById('signupBtn').disabled = false;
         }
@@ -768,6 +1072,50 @@
         document.getElementById('signupConfirmPassword').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') attemptSignup();
         });
+
+        document.getElementById('aiMessageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendAiMessage();
+        });
+
+        function sendAiMessage() {
+            var input = document.getElementById('aiMessageInput');
+            var msg = (input && input.value || '').trim();
+            if (!msg) return;
+            var container = document.getElementById('aiMessages');
+            var div = document.createElement('div');
+            div.className = 'ai-msg user';
+            div.textContent = msg;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+            if (input) input.value = '';
+
+            fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg }) })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var d = document.createElement('div');
+                    d.className = 'ai-msg bot';
+                    d.textContent = data.reply || 'No response.';
+                    container.appendChild(d);
+                    container.scrollTop = container.scrollHeight;
+                })
+                .catch(function() {
+                    var d = document.createElement('div');
+                    d.className = 'ai-msg bot';
+                    d.textContent = 'Request failed. Check connection.';
+                    container.appendChild(d);
+                    container.scrollTop = container.scrollHeight;
+                });
+        }
+
+        document.querySelectorAll('.tab-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+        });
+        document.querySelectorAll('.ai-sub-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() { switchAiSub(btn.dataset.sub); });
+        });
+
+        var ru = getCookie('rememberUsername');
+        if (ru) { var lu = document.getElementById('loginUsername'); if (lu) lu.value = ru; }
 
         // Initialize connection
         connectWebSocket();
