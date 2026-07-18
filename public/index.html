@@ -429,9 +429,10 @@
     <script>
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = protocol + '//' + window.location.host;
+        const RESUME_TOKEN_KEY = 'tdtu.resumeToken';
         let ws = null;
         let reconnectAttempts = 0;
-        let maxReconnectAttempts = 5;
+        let reconnectTimer = null;
         
         const chatContainer = document.getElementById('chat-container');
         const messageInput = document.getElementById('messageInput');
@@ -449,6 +450,7 @@
         let isAuthenticated = false;
         let pendingAuthCommand = null;
         let pendingImageTicket = null;
+        let pendingImageFile = null;
         let uploadInProgress = false;
 
         function showSignup() {
@@ -543,7 +545,7 @@
         }
 
         function connectWebSocket() {
-            if (ws && ws.readyState === WebSocket.OPEN) return;
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
             ws = new WebSocket(wsUrl);
             
@@ -553,10 +555,12 @@
                 statusSpan.style.color = 'var(--success-color)';
                 reconnectAttempts = 0;
 
-                // Send pending auth command if exists
                 if (pendingAuthCommand) {
                     ws.send(JSON.stringify({ type: 'message', content: pendingAuthCommand }));
                     pendingAuthCommand = null;
+                } else {
+                    const resumeToken = sessionStorage.getItem(RESUME_TOKEN_KEY);
+                    if (resumeToken) ws.send(JSON.stringify({ type: 'resume', token: resumeToken, loadHistory: !isAuthenticated }));
                 }
             };
 
@@ -574,11 +578,21 @@
                         break;
 
                     case 'auth_success':
+                        if (typeof data.resumeToken === 'string') sessionStorage.setItem(RESUME_TOKEN_KEY, data.resumeToken);
                         handleAuthSuccess();
                         break;
 
                     case 'auth_error':
-                        showError(data.form === 'login' ? 'loginError' : 'signupError', data.message);
+                        if (data.form === 'resume') {
+                            sessionStorage.removeItem(RESUME_TOKEN_KEY);
+                            isAuthenticated = false;
+                            loginOverlay.style.display = 'flex';
+                            inputArea.style.display = 'none';
+                            colorInput.disabled = true;
+                            showError('loginError', data.message);
+                        } else {
+                            showError(data.form === 'login' ? 'loginError' : 'signupError', data.message);
+                        }
                         break;
 
                     case 'system':
@@ -666,15 +680,13 @@
         }
 
         function attemptReconnect() {
-            if (reconnectAttempts < maxReconnectAttempts) {
-                reconnectAttempts++;
-                setTimeout(() => {
-                    console.log(`Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`);
-                    connectWebSocket();
-                }, 2000 * reconnectAttempts);
-            } else {
-                addMessage('system', '❌ Failed to reconnect. Please refresh the page.');
-            }
+            if (reconnectTimer) return;
+            reconnectAttempts++;
+            const delay = Math.min(1000 * 2 ** Math.min(reconnectAttempts, 5), 30000);
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
+                connectWebSocket();
+            }, delay);
         }
 
         function sendMessage() {
@@ -793,9 +805,8 @@
             }
         }
 
-        imageInput.addEventListener('change', () => {
-            const file = imageInput.files[0];
-            if (!file) return;
+        function beginImageUpload(file) {
+            if (!file || uploadInProgress) return;
             if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
                 uploadStatus.textContent = 'Use PNG, JPEG, GIF, or WebP up to 5 MiB.';
                 imageInput.value = '';
@@ -805,14 +816,26 @@
                 uploadStatus.textContent = 'Connect and login before uploading.';
                 return;
             }
+            pendingImageFile = file;
             uploadInProgress = true;
             imageInput.disabled = true;
             uploadStatus.textContent = 'Preparing upload...';
             ws.send(JSON.stringify({ type: 'image_upload_ticket' }));
+        }
+
+        imageInput.addEventListener('change', () => beginImageUpload(imageInput.files[0]));
+
+        messageInput.addEventListener('paste', event => {
+            const file = [...event.clipboardData.items]
+                .find(item => item.kind === 'file' && IMAGE_TYPES.has(item.type))
+                ?.getAsFile();
+            if (!file) return;
+            event.preventDefault();
+            beginImageUpload(file);
         });
 
         async function uploadSelectedImage() {
-            const file = imageInput.files[0];
+            const file = pendingImageFile;
             const ticket = pendingImageTicket;
             pendingImageTicket = null;
             if (!file || !ticket) return finishImageUpload('Image upload failed.');
@@ -838,6 +861,7 @@
 
         function finishImageUpload(message) {
             uploadInProgress = false;
+            pendingImageFile = null;
             imageInput.disabled = false;
             imageInput.value = '';
             uploadStatus.textContent = message;

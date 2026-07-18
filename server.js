@@ -12,7 +12,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, maxPayload: 64 * 1024 });
 const connectionString = process.env.DATABASE_URL;
+const resumeTokenSecret = process.env.RESUME_TOKEN_SECRET;
 const uploadDir = path.join(__dirname, 'public', 'uploads');
+const RESUME_TOKEN_TTL_MS = 8 * 60 * 60 * 1000;
 const uploadTickets = new Map();
 const uploadedImages = new Map();
 const HISTORY_LIMIT = 50;
@@ -23,8 +25,8 @@ const MAX_MESSAGE_LENGTH = 4000;
 let currentTheme = 'default';
 let currentTitle = 'Classroom';
 
-if (!connectionString) {
-    console.error('DATABASE_URL environment variable is not set');
+if (!connectionString || !resumeTokenSecret) {
+    console.error('DATABASE_URL and RESUME_TOKEN_SECRET environment variables are required');
     process.exit(1);
 }
 
@@ -56,6 +58,27 @@ function removeExpiredTickets() {
     for (const [ticket, data] of uploadTickets) {
         if (data.expiresAt <= now) uploadTickets.delete(ticket);
     }
+}
+
+function issueResumeToken(username) {
+    const payload = Buffer.from(JSON.stringify({ v: 1, sub: username, exp: Date.now() + RESUME_TOKEN_TTL_MS })).toString('base64url');
+    const signature = crypto.createHmac('sha256', resumeTokenSecret).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+}
+
+function readResumeToken(token) {
+    if (typeof token !== 'string' || token.length > 1024) return null;
+    const [payload, signature, extra] = token.split('.');
+    if (!payload || !signature || extra) return null;
+    const expected = crypto.createHmac('sha256', resumeTokenSecret).update(payload).digest();
+    let received;
+    try { received = Buffer.from(signature, 'base64url'); } catch { return null; }
+    if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) return null;
+    try {
+        const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+        if (data.v !== 1 || typeof data.sub !== 'string' || !data.sub || data.sub.length > 20 || !Number.isSafeInteger(data.exp) || data.exp <= Date.now()) return null;
+        return data;
+    } catch { return null; }
 }
 
 app.post('/api/uploads/images', express.raw({ type: '*/*', limit: MAX_IMAGE_BYTES }), async (req, res) => {
@@ -105,7 +128,13 @@ wss.on('connection', async (ws, req) => {
     ws.on('message', async message => {
         try {
             const data = JSON.parse(message.toString());
-            if (data.type === 'message') {
+            if (data.type === 'resume') {
+                const resume = readResumeToken(data.token);
+                if (!resume) return authError(ws, 'resume', 'Session expired. Please login again.');
+                const result = await pool.query('SELECT username, is_admin FROM users WHERE username = $1', [resume.sub]);
+                if (!result.rows[0]) return authError(ws, 'resume', 'Session expired. Please login again.');
+                await loginUser(ws, result.rows[0].username, result.rows[0].is_admin, { resumed: true, loadHistory: data.loadHistory === true });
+            } else if (data.type === 'message') {
                 const content = typeof data.content === 'string' ? data.content.trim() : '';
                 if (content.startsWith('/')) await handleCommand(ws, content);
                 else if (!ws.userData.isLoggedIn) sendSystem(ws, 'Please login first.');
@@ -131,11 +160,7 @@ wss.on('connection', async (ws, req) => {
         }
     });
 
-    ws.on('close', () => {
-        if (ws.userData.isLoggedIn) {
-            broadcast(JSON.stringify({ type: 'system', content: `${ws.userData.username} left.` }));
-        }
-    });
+    ws.on('close', () => {});
     ws.on('error', error => console.error('WebSocket error:', error.message));
 });
 
@@ -309,18 +334,20 @@ function authError(ws, form, message) {
     ws.send(JSON.stringify({ type: 'auth_error', form, message }));
 }
 
-async function loginUser(ws, username, isAdmin) {
+async function loginUser(ws, username, isAdmin, { resumed = false, loadHistory = true } = {}) {
     ws.userData.username = username;
     ws.userData.isLoggedIn = true;
     ws.userData.isAdmin = Boolean(isAdmin);
     ws.userData.color = getRandomColor();
-    ws.send(JSON.stringify({ type: 'auth_success', message: 'Login successful!' }));
+    ws.send(JSON.stringify({ type: 'auth_success', message: 'Login successful!', resumeToken: issueResumeToken(username) }));
     ws.send(JSON.stringify({ type: 'init', username, color: ws.userData.color, authenticated: true }));
-    try {
-        const history = await pool.query('SELECT id, username, content, image_url AS "imageUrl", timestamp FROM current_chat ORDER BY timestamp DESC LIMIT $1', [HISTORY_LIMIT]);
-        ws.send(JSON.stringify({ type: 'history', content: history.rows.reverse() }));
-    } catch (error) { console.error('Error loading history:', error.message); }
-    broadcast(JSON.stringify({ type: 'system', content: `${username} joined the chat.` }));
+    if (loadHistory) {
+        try {
+            const history = await pool.query('SELECT id, username, content, image_url AS "imageUrl", timestamp FROM current_chat ORDER BY timestamp DESC LIMIT $1', [HISTORY_LIMIT]);
+            ws.send(JSON.stringify({ type: 'history', content: history.rows.reverse() }));
+        } catch (error) { console.error('Error loading history:', error.message); }
+    }
+    if (!resumed) broadcast(JSON.stringify({ type: 'system', content: `${username} joined the chat.` }));
 }
 
 async function saveAndBroadcast(username, color, content, imageUrl = null, imageExpiresAt = null) {
@@ -373,7 +400,10 @@ const PORT = process.env.PORT || 3000;
 if (require.main === module) {
     Promise.all([initDatabase(), fs.mkdir(uploadDir, { recursive: true })]).then(async () => {
         await cleanupExpiredImages();
-        setInterval(cleanupExpiredImages, 60 * 60 * 1000).unref();
+        setInterval(() => {
+            cleanupExpiredImages();
+            removeExpiredTickets();
+        }, 60 * 1000).unref();
         server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     }).catch(error => {
         console.error('Failed to start server:', error);

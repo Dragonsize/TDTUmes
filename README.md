@@ -9,13 +9,20 @@ npm install
 DATABASE_URL='postgresql://...' npm start
 ```
 
-Render environment variable:
+Render environment variables:
 
 ```text
 DATABASE_URL=<Supabase Postgres connection URI>
+RESUME_TOKEN_SECRET=<random stable secret>
 ```
 
-Get URI from Supabase Dashboard → **Connect** → **Connection string** → **URI**. Keep it server-side. Do not put it in browser code or Git.
+Generate secret once:
+
+```bash
+openssl rand -base64 32
+```
+
+Keep both values server-side. Do not put them in browser code or Git. `RESUME_TOKEN_SECRET` must stay unchanged across deploys, or users need to login again after restart.
 
 ## Supabase schema
 
