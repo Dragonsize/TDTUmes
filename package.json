@@ -4,7 +4,8 @@
   "description": "A chat for IP and Port connections with Neon Database and Account Security",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^4.18.2",

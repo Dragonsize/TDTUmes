@@ -1,64 +1,78 @@
-TDTU Messenger (Port Chat)
+# TDTU Messenger
 
-A real-time, WebSocket-based chat application built with Node.js. This application assigns users a unique identity based on their connection port and allows for public messaging, private DMs, and customizable themes. Including an integrated AI assistant named tdtuAI.
+Real-time classroom chat using Node.js, Express, WebSockets, and Supabase PostgreSQL.
 
-Core functionality
+## Run
 
-Real-time messaging: communication using WebSockets.
-Identity system: users are identified by their unique port number by default but can change their username and text color.
-Private Messaging: send DMs to specific users.
-Chat history: new users automatically see the last 50 messages upon joining so they have context.
-Mobile friendly: specific fixes to display ASCII art correctly on small screens.
-AI assistant (tdtuAI)
-Smart replies: Start any message with Hey tdtuAI to ask the AI a question.
-Example: Hey tdtuAI what is the capital of Vietnam?
-Powered by Google Gemini
+```bash
+npm install
+DATABASE_URL='postgresql://...' npm start
+```
 
-Themes & Customization
+Render environment variable:
 
-Themes: switch between Green (Default), Purple,  Blue, and  Red.
-Rainbow mode: special animated text color .
-Dynamic room title: The chat room title can be changed dynamically by an admin.
+```text
+DATABASE_URL=<Supabase Postgres connection URI>
+```
 
-Tech Stack
-Backend: Node.js, Express, ws (WebSocket library).
-Frontend: Vanilla HTML, CSS, and JavaScript.
-AI: Google Gemini API (gemini-1.5-flash).
+Get URI from Supabase Dashboard → **Connect** → **Connection string** → **URI**. Keep it server-side. Do not put it in browser code or Git.
 
-Commands
+## Supabase schema
 
-Public Commands
-/m <user> <msg>
-Send a private Direct Message to a user.
+New database only:
 
+```bash
+supabase db push
+```
+
+Or run `supabase/migrations/001_initial_schema_image_uploads_and_admin.sql` in Supabase SQL Editor. It creates accounts, active/archive chat tables, image metadata, and test admin account.
+
+## Test admin
+
+```text
+Username: test1
+Password: test1
+```
+
+Known public credential. Test deployment only. Anyone knowing it can use admin commands.
+
+## Images
+
+- PNG, JPEG, GIF, WebP only
+- Maximum 5 MiB
+- Image files save temporarily under Render `public/uploads/`
+- Images auto-delete after 30 days
+- Deploy/restart can remove image files earlier; message/caption remains and shows expired state
+- `/remove <id>` deletes image file and clears image link. Message/caption stays.
+
+## Commands
+
+```text
 /tdtu
-Display the custom TDTU #1 ASCII art.
-
-/ping
-Check your latency (ping) to the server.
-
-/cls
-Clear your local chat screen.
-
-/?
-Show the help menu.
-
-Hey tdtuAI <query>
-Ask the AI assistant a question.
-
-Secret Admin Commands
-To access these, you must first type /admin@ to unlock admin privileges.
-/admin@
-Unlocks admin mode (grants access to commands below).
-
 /rainbow
-Sets your text color to an animated rainbow gradient.
+/note [text]
+/profile
+/whois <user>
+/dm <user> <message>
+/users
+/ping
+/cls
+/?
+```
 
-/theme <color>
-Changes the theme for everyone. Options: red, purple, blue, default.
+Admin only:
 
-/chattitle <text>
-Changes the chatroom header title for everyone.
+```text
+/theme <default|purple|blue|red>
+/title <text>
+/db
+/remove <image message id>
+/archive
+```
 
-/clearall
-Wipes the server chat history and clears screens for everyone.
+## Verify
+
+```bash
+npm test
+node --check server.js
+```

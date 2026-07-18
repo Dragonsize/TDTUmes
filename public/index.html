@@ -213,12 +213,28 @@
             white-space: nowrap; 
         }
 
-        #input-area { 
-            display: flex; 
-            gap: 10px; 
+        #input-area {
+            display: flex;
+            gap: 10px;
         }
-        
-        input#messageInput { 
+
+        .chat-image {
+            display: block;
+            max-width: min(100%, 480px);
+            max-height: 360px;
+            margin-top: 8px;
+            object-fit: contain;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+        }
+
+        #uploadStatus {
+            align-self: center;
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        input#messageInput {
             flex: 1; 
             padding: 12px; 
             background: var(--input-bg); 
@@ -394,6 +410,8 @@
 
     <div id="input-area" style="display: none;">
         <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
+        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Upload image">
+        <span id="uploadStatus" aria-live="polite"></span>
         <button onclick="sendMessage()">SEND</button>
     </div>
 
@@ -423,10 +441,15 @@
         const chatTitle = document.getElementById('chatTitle');
         const loginOverlay = document.getElementById('login-overlay');
         const inputArea = document.getElementById('input-area');
+        const imageInput = document.getElementById('imageInput');
+        const uploadStatus = document.getElementById('uploadStatus');
 
-        let isAdmin = false;
+        const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+        const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
         let isAuthenticated = false;
         let pendingAuthCommand = null;
+        let pendingImageTicket = null;
+        let uploadInProgress = false;
 
         function showSignup() {
             document.getElementById('loginForm').style.display = 'none';
@@ -579,8 +602,14 @@
                         chatTitle.textContent = data.title;
                         break;
 
-                    case 'admin_granted':
-                        isAdmin = true;
+                    case 'image_upload_ticket':
+                        pendingImageTicket = data;
+                        uploadSelectedImage();
+                        break;
+
+                    case 'image_removed':
+                        const image = document.querySelector(`[data-message-id="${data.id}"] .chat-image`);
+                        if (image) replaceExpiredImage(image);
                         break;
 
                     case 'clear_history':
@@ -664,12 +693,28 @@
 
         function renderChatMessage(data) {
             const time = new Date(data.timestamp).toLocaleTimeString();
-            addMessage('user', data.content, data.username, data.color, time);
+            const message = addMessage('user', data.content, data.username, data.color, time, data.id);
+            if (data.imageUrl && /^\/uploads\/[0-9a-f-]+\.(png|jpg|gif|webp)$/i.test(data.imageUrl)) {
+                const image = document.createElement('img');
+                image.className = 'chat-image';
+                image.src = data.imageUrl;
+                image.alt = data.content || 'Uploaded image';
+                image.loading = 'lazy';
+                image.onerror = () => replaceExpiredImage(image);
+                message.querySelector('.message-content').appendChild(image);
+            }
         }
 
-        function addMessage(type, text, username = null, color = null, timestamp = null) {
+        function replaceExpiredImage(image) {
+            const text = document.createElement('span');
+            text.textContent = 'Image deleted or expired';
+            image.replaceWith(text);
+        }
+
+        function addMessage(type, text, username = null, color = null, timestamp = null, id = null) {
             const div = document.createElement('div');
             div.className = `message ${type === 'system' ? 'system' : (type === 'dm' ? 'dm-msg' : 'user-msg')}`;
+            if (id !== null && id !== undefined) div.dataset.messageId = id;
 
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
@@ -700,6 +745,7 @@
 
             chatContainer.appendChild(div);
             chatContainer.scrollTop = chatContainer.scrollHeight;
+            return div;
         }
 
         function applyTheme(theme) {
@@ -709,26 +755,23 @@
         function openDbModal(rows) {
             const modal = document.getElementById('dbModal');
             const container = document.getElementById('dbTableContainer');
-            
-            let html = '<table class="db-table"><thead><tr><th>ID</th><th>Username</th><th>Content</th><th>Timestamp</th></tr></thead><tbody>';
-            
+            let html = '<table class="db-table"><thead><tr><th>ID</th><th>Username</th><th>Content</th><th>Image</th><th>Timestamp</th></tr></thead><tbody>';
             if (rows.length === 0) {
-                html += '<tr><td colspan="4" style="text-align: center; padding: 20px;">No messages in database</td></tr>';
+                html += '<tr><td colspan="5" style="text-align: center; padding: 20px;">No messages in database</td></tr>';
             } else {
                 rows.forEach(row => {
                     const time = new Date(row.timestamp).toLocaleString();
-                    const content = escapeHtml(row.content);
+                    const image = row.image_url ? `Present — /remove ${row.id}` : 'None';
                     html += `<tr>
                         <td>${row.id}</td>
                         <td>${escapeHtml(row.username)}</td>
-                        <td>${content}</td>
+                        <td>${escapeHtml(row.content)}</td>
+                        <td>${image}</td>
                         <td>${time}</td>
                     </tr>`;
                 });
             }
-            
-            html += '</tbody></table>';
-            container.innerHTML = html;
+            container.innerHTML = html + '</tbody></table>';
             modal.style.display = 'block';
         }
 
@@ -750,8 +793,58 @@
             }
         }
 
-        messageInput.addEventListener('keypress', (e) => { 
-            if (e.key === 'Enter') sendMessage(); 
+        imageInput.addEventListener('change', () => {
+            const file = imageInput.files[0];
+            if (!file) return;
+            if (!IMAGE_TYPES.has(file.type) || file.size > MAX_IMAGE_BYTES) {
+                uploadStatus.textContent = 'Use PNG, JPEG, GIF, or WebP up to 5 MiB.';
+                imageInput.value = '';
+                return;
+            }
+            if (!isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) {
+                uploadStatus.textContent = 'Connect and login before uploading.';
+                return;
+            }
+            uploadInProgress = true;
+            imageInput.disabled = true;
+            uploadStatus.textContent = 'Preparing upload...';
+            ws.send(JSON.stringify({ type: 'image_upload_ticket' }));
+        });
+
+        async function uploadSelectedImage() {
+            const file = imageInput.files[0];
+            const ticket = pendingImageTicket;
+            pendingImageTicket = null;
+            if (!file || !ticket) return finishImageUpload('Image upload failed.');
+            try {
+                uploadStatus.textContent = 'Uploading image...';
+                const response = await fetch('/api/uploads/images', {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${ticket.ticket}`,
+                        'Content-Type': file.type
+                    },
+                    body: file
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Image upload failed.');
+                ws.send(JSON.stringify({ type: 'image_message', imageUrl: data.imageUrl, content: messageInput.value.trim() }));
+                messageInput.value = '';
+                finishImageUpload('Image sent.');
+            } catch (error) {
+                finishImageUpload(error.message);
+            }
+        }
+
+        function finishImageUpload(message) {
+            uploadInProgress = false;
+            imageInput.disabled = false;
+            imageInput.value = '';
+            uploadStatus.textContent = message;
+        }
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !uploadInProgress) sendMessage();
         });
 
         colorInput.addEventListener('change', () => {

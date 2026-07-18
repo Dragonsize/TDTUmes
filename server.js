@@ -2,746 +2,365 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
+const fs = require('fs/promises');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+const { IMAGE_TYPES, detectImageType, imageFilename, isUploadFilename } = require('./lib/image-validation');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
-
-// Neon Database Connection
+const wss = new WebSocket.Server({ server, maxPayload: 64 * 1024 });
 const connectionString = process.env.DATABASE_URL;
+const uploadDir = path.join(__dirname, 'public', 'uploads');
+const uploadTickets = new Map();
+const uploadedImages = new Map();
+const HISTORY_LIMIT = 50;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const IMAGE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const TICKET_LIFETIME_MS = 60 * 1000;
+const MAX_MESSAGE_LENGTH = 4000;
+let currentTheme = 'default';
+let currentTitle = 'Classroom';
 
 if (!connectionString) {
-    console.error('❌ DATABASE_URL environment variable is not set');
-    console.error('Please set DATABASE_URL in your environment variables or .env file');
+    console.error('DATABASE_URL environment variable is not set');
     process.exit(1);
 }
 
-console.log('🔍 Connecting to database...');
-
 const pool = new Pool({
-    connectionString: connectionString,
-    ssl: {
-        rejectUnauthorized: false
-    }
+    connectionString,
+    ssl: { rejectUnauthorized: false }
 });
 
-// Initialize database - tables already exist in Neon, just verify connection
 async function initDatabase() {
     try {
-        // Test database connection
         const result = await pool.query('SELECT NOW()');
-        console.log('Database connected successfully');
-        console.log('Server time:', result.rows[0].now);
-        
-        // Verify tables exist
-        const tablesCheck = await pool.query(`
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name IN ('users', 'current_chat')
-        `);
-        
-        console.log('Found tables:', tablesCheck.rows.map(r => r.table_name).join(', '));
-        
+        console.log('Database connected successfully:', result.rows[0].now);
+        await pool.query('SELECT username, is_admin FROM users LIMIT 1');
+        await pool.query('SELECT id, image_url, image_expires_at FROM current_chat LIMIT 1');
+        await pool.query('SELECT id, image_url, image_expires_at FROM history_archive LIMIT 1');
     } catch (err) {
-        console.error('❌ Database connection error:', err);
+        console.error('Database schema or connection error:', err.message);
         process.exit(1);
     }
 }
 
-app.use(express.static(path.join(__dirname, 'public')));
+function ticketFromRequest(req) {
+    const authorization = req.get('authorization') || '';
+    return authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+}
 
-const HISTORY_LIMIT = 50;
-let currentTheme = 'default';
-let currentTitle = 'Classroom';
+function removeExpiredTickets() {
+    const now = Date.now();
+    for (const [ticket, data] of uploadTickets) {
+        if (data.expiresAt <= now) uploadTickets.delete(ticket);
+    }
+}
+
+app.post('/api/uploads/images', express.raw({ type: '*/*', limit: MAX_IMAGE_BYTES }), async (req, res) => {
+    removeExpiredTickets();
+    const ticket = ticketFromRequest(req);
+    const ticketData = uploadTickets.get(ticket);
+    uploadTickets.delete(ticket);
+
+    if (!ticketData || ticketData.expiresAt <= Date.now()) {
+        return res.status(401).json({ error: 'Invalid or expired upload ticket.' });
+    }
+
+    const claimedType = req.get('content-type')?.split(';')[0].toLowerCase();
+    const detectedType = Buffer.isBuffer(req.body) ? detectImageType(req.body) : null;
+    if (!IMAGE_TYPES[claimedType] || claimedType !== detectedType) {
+        return res.status(415).json({ error: 'Use PNG, JPEG, GIF, or WebP images only.' });
+    }
+
+    try {
+        const filename = imageFilename(detectedType);
+        await fs.writeFile(path.join(uploadDir, filename), req.body, { flag: 'wx' });
+        const imageUrl = `/uploads/${filename}`;
+        uploadedImages.set(imageUrl, { username: ticketData.username, expiresAt: Date.now() + IMAGE_LIFETIME_MS });
+        res.set('X-Content-Type-Options', 'nosniff');
+        return res.status(201).json({ imageUrl });
+    } catch (error) {
+        console.error('Image upload failed:', error.message);
+        return res.status(500).json({ error: 'Image upload failed.' });
+    }
+});
+
+app.use('/uploads', express.static(uploadDir, { fallthrough: false, setHeaders(res) { res.set('X-Content-Type-Options', 'nosniff'); } }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use((error, req, res, next) => {
+    if (error.type === 'entity.too.large') return res.status(413).json({ error: 'Images must be 5 MiB or smaller.' });
+    return next(error);
+});
 
 wss.on('connection', async (ws, req) => {
-    let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    ws.userData = { 
-        username: '', 
-        color: '#00ff00', 
-        ip, 
-        isAdmin: false, 
-        isLoggedIn: false 
-    };
-
-    console.log(`🔌 New connection from ${ip}`);
-
-    // Initial state sync
+    const ip = req.socket.remoteAddress;
+    ws.userData = { username: '', color: '#00ff00', ip, isAdmin: false, isLoggedIn: false };
+    console.log(`New connection from ${ip}`);
     ws.send(JSON.stringify({ type: 'theme', theme: currentTheme }));
     ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
     ws.send(JSON.stringify({ type: 'system', content: 'Welcome! Please login or register.' }));
 
-    ws.on('message', async (message) => {
+    ws.on('message', async message => {
         try {
             const data = JSON.parse(message.toString());
-            
             if (data.type === 'message') {
-                const content = data.content.trim();
-                
-                if (content.startsWith('/')) {
-                    await handleCommand(ws, content);
-                } else if (ws.userData.isLoggedIn) {
-                    await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
-                } else {
-                    ws.send(JSON.stringify({ 
-                        type: 'system', 
-                        content: 'Please login first.' 
-                    }));
-                }
+                const content = typeof data.content === 'string' ? data.content.trim() : '';
+                if (content.startsWith('/')) await handleCommand(ws, content);
+                else if (!ws.userData.isLoggedIn) sendSystem(ws, 'Please login first.');
+                else if (!content) return;
+                else if (content.length > MAX_MESSAGE_LENGTH) sendSystem(ws, 'Message is too long.');
+                else await saveAndBroadcast(ws.userData.username, ws.userData.color, content);
+            } else if (data.type === 'image_upload_ticket') {
+                if (!ws.userData.isLoggedIn) return sendSystem(ws, 'Please login first.');
+                const ticket = crypto.randomBytes(32).toString('hex');
+                const expiresAt = Date.now() + TICKET_LIFETIME_MS;
+                uploadTickets.set(ticket, { username: ws.userData.username, expiresAt });
+                ws.send(JSON.stringify({ type: 'image_upload_ticket', ticket, expiresAt }));
+            } else if (data.type === 'image_message') {
+                await handleImageMessage(ws, data);
             } else if (data.type === 'update_color' && ws.userData.isLoggedIn) {
                 ws.userData.color = data.content;
             } else if (data.type === 'update_name' && ws.userData.isLoggedIn) {
-                ws.send(JSON.stringify({ 
-                    type: 'system', 
-                    content: 'Cannot change username while logged in.' 
-                }));
+                sendSystem(ws, 'Cannot change username while logged in.');
             }
-        } catch (e) {
-            console.error('WS Error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Invalid message format' 
-            }));
+        } catch (error) {
+            console.error('WS Error:', error.message);
+            sendSystem(ws, 'Invalid message format');
         }
     });
 
     ws.on('close', () => {
         if (ws.userData.isLoggedIn) {
-            console.log(` ${ws.userData.username} disconnected`);
-            broadcast(JSON.stringify({ 
-                type: 'system', 
-                content: `${ws.userData.username} left.` 
-            }));
+            broadcast(JSON.stringify({ type: 'system', content: `${ws.userData.username} left.` }));
         }
     });
-
-    ws.on('error', (error) => {
-        console.error('WebSocket error:', error);
-    });
+    ws.on('error', error => console.error('WebSocket error:', error.message));
 });
+
+function sendSystem(ws, content) {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'system', content }));
+}
+
+async function handleImageMessage(ws, data) {
+    if (!ws.userData.isLoggedIn) return sendSystem(ws, 'Please login first.');
+    const imageUrl = typeof data.imageUrl === 'string' ? data.imageUrl : '';
+    const uploaded = uploadedImages.get(imageUrl);
+    const content = typeof data.content === 'string' ? data.content.trim() : '';
+    if (!uploaded || uploaded.username !== ws.userData.username || uploaded.expiresAt <= Date.now()) {
+        return sendSystem(ws, 'Invalid or expired image upload.');
+    }
+    if (content.length > MAX_MESSAGE_LENGTH) return sendSystem(ws, 'Caption is too long.');
+    uploadedImages.delete(imageUrl);
+    await saveAndBroadcast(ws.userData.username, ws.userData.color, content, imageUrl, new Date(uploaded.expiresAt).toISOString());
+}
 
 async function handleCommand(ws, content) {
     const parts = content.split(' ');
     const cmd = parts[0].toLowerCase();
-    
-    console.log(` Command: ${cmd} from ${ws.userData.username || 'anonymous'}`);
-    
-    // REGISTRATION
+
     if (cmd === '/register') {
         const username = parts[1]?.trim();
         const password = parts.slice(2).join(' ');
-        
-        if (!username || !password) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: 'Usage: /register <username> <password>' 
-            }));
-            return;
-        }
-
-        if (username.length > 20) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: 'Username must be 20 characters or less' 
-            }));
-            return;
-        }
-
-        if (password.length < 4) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: 'Password must be at least 4 characters' 
-            }));
-            return;
-        }
-
+        if (!username || !password) return authError(ws, 'signup', 'Usage: /register <username> <password>');
+        if (username.length > 20) return authError(ws, 'signup', 'Username must be 20 characters or less');
+        if (password.length < 4) return authError(ws, 'signup', 'Password must be at least 4 characters');
         try {
-            const check = await pool.query(
-                'SELECT username FROM users WHERE username = $1', 
-                [username]
-            );
-            
-            if (check.rows.length > 0) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'signup',
-                    message: 'Username already taken' 
-                }));
-                return;
-            }
-
             const hash = await bcrypt.hash(password, 10);
-            await pool.query(
-                'INSERT INTO users (username, password_hash, personal_note) VALUES ($1, $2, $3)', 
-                [username, hash, '']
-            );
-
-            console.log(`New user registered: ${username}`);
-            await loginUser(ws, username);
-
-        } catch (e) {
-            console.error('Registration error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'signup',
-                message: 'Registration failed. Please try again.' 
-            }));
+            await pool.query('INSERT INTO users (username, password_hash, personal_note) VALUES ($1, $2, $3)', [username, hash, '']);
+            await loginUser(ws, username, false);
+        } catch (error) {
+            authError(ws, 'signup', error.code === '23505' ? 'Username already taken' : 'Registration failed. Please try again.');
         }
         return;
     }
 
-    // LOGIN
     if (cmd === '/login') {
         const username = parts[1]?.trim();
         const password = parts.slice(2).join(' ');
-        
-        if (!username || !password) {
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'login',
-                message: 'Usage: /login <username> <password>' 
-            }));
-            return;
-        }
-
+        if (!username || !password) return authError(ws, 'login', 'Usage: /login <username> <password>');
         try {
-            const userRes = await pool.query(
-                'SELECT username, password_hash FROM users WHERE username = $1', 
-                [username]
-            );
-
-            if (userRes.rows.length === 0) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'login',
-                    message: 'Invalid username or password' 
-                }));
-                return;
-            }
-
+            const userRes = await pool.query('SELECT username, password_hash, is_admin FROM users WHERE username = $1', [username]);
             const user = userRes.rows[0];
-            const validPassword = await bcrypt.compare(password, user.password_hash);
-            
-            if (!validPassword) {
-                ws.send(JSON.stringify({ 
-                    type: 'auth_error', 
-                    form: 'login',
-                    message: 'Invalid username or password' 
-                }));
-                return;
-            }
-
-            console.log(`User logged in: ${username}`);
-            await loginUser(ws, username);
-
-        } catch (e) {
-            console.error('Login error:', e);
-            ws.send(JSON.stringify({ 
-                type: 'auth_error', 
-                form: 'login',
-                message: 'Login failed. Please try again.' 
-            }));
+            if (!user || !(await bcrypt.compare(password, user.password_hash))) return authError(ws, 'login', 'Invalid username or password');
+            await loginUser(ws, user.username, user.is_admin);
+        } catch (error) {
+            console.error('Login error:', error.message);
+            authError(ws, 'login', 'Login failed. Please try again.');
         }
         return;
     }
 
-    // Commands that require login
-    if (!ws.userData.isLoggedIn) {
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: 'Please login first.' 
-        }));
-        return;
-    }
-    
-    // NOTE COMMAND
+    if (!ws.userData.isLoggedIn) return sendSystem(ws, 'Please login first.');
+
     if (cmd === '/note') {
         const noteContent = parts.slice(1).join(' ');
-        console.log(` Note command from ${ws.userData.username}: "${noteContent}"`);
-        
         try {
             if (!noteContent) {
-                // View current note
-                const result = await pool.query(
-                    'SELECT personal_note FROM users WHERE username = $1',
-                    [ws.userData.username]
-                );
-                
-                if (result.rows.length === 0) {
-                    ws.send(JSON.stringify({
-                        type: 'system',
-                        content: 'User not found in database'
-                    }));
-                    return;
-                }
-                
-                const note = result.rows[0].personal_note;
-                console.log(`Current note for ${ws.userData.username}: "${note}"`);
-                
-                ws.send(JSON.stringify({
-                    type: 'system',
-                    content: note ? `Your note: ${note}` : 'You have no note set.\nUsage: /note <your note text>'
-                }));
-            } else {
-                // Set new note
-                const updateResult = await pool.query(
-                    'UPDATE users SET personal_note = $1 WHERE username = $2 RETURNING personal_note',
-                    [noteContent, ws.userData.username]
-                );
-                
-                console.log(`Note updated for ${ws.userData.username}: "${noteContent}"`);
-                
-                if (updateResult.rows.length === 0) {
-                    ws.send(JSON.stringify({
-                        type: 'system',
-                        content: 'Failed to update note'
-                    }));
-                    return;
-                }
-                
-                ws.send(JSON.stringify({
-                    type: 'system',
-                    content: `Note saved: ${noteContent}`
-                }));
+                const result = await pool.query('SELECT personal_note FROM users WHERE username = $1', [ws.userData.username]);
+                return sendSystem(ws, result.rows[0]?.personal_note ? `Your note: ${result.rows[0].personal_note}` : 'You have no note set.\nUsage: /note <your note text>');
             }
-        } catch (e) {
-            console.error('Note error:', e);
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: `Failed to access note: ${e.message}`
-            }));
-        }
-        return;
+            await pool.query('UPDATE users SET personal_note = $1 WHERE username = $2', [noteContent, ws.userData.username]);
+            return sendSystem(ws, `Note saved: ${noteContent}`);
+        } catch (error) { return sendSystem(ws, 'Failed to access note'); }
     }
-    
-    // PROFILE COMMAND
-    if (cmd === '/profile' || cmd === '/me') {
-        try {
-            const result = await pool.query(
-                'SELECT username FROM users WHERE username = $1',
-                [ws.userData.username]
-            );
-            
-            const user = result.rows[0];
-            const profile = `
-Profile: ${user.username}
-Color: ${ws.userData.color}
-Admin: ${ws.userData.isAdmin ? 'Yes' : 'No'}
-            `.trim();
-            
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: profile
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: 'Failed to load profile'
-            }));
-        }
-        return;
-    }
-    
-    // WHOIS COMMAND
+
+    if (cmd === '/profile' || cmd === '/me') return sendSystem(ws, `Profile: ${ws.userData.username}\nColor: ${ws.userData.color}\nAdmin: ${ws.userData.isAdmin ? 'Yes' : 'No'}`);
+
     if (cmd === '/whois') {
         const targetUser = parts[1];
-        
-        if (!targetUser) {
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: 'Usage: /whois <username>'
-            }));
-            return;
-        }
-        
-        try {
-            const result = await pool.query(
-                'SELECT username FROM users WHERE username = $1',
-                [targetUser]
-            );
-            
-            if (result.rows.length === 0) {
-                ws.send(JSON.stringify({
-                    type: 'system',
-                    content: `User '${targetUser}' not found`
-                }));
-                return;
-            }
-            
-            const user = result.rows[0];
-            let isOnline = false;
-            
-            wss.clients.forEach(client => {
-                if (client.userData.username === targetUser && client.readyState === WebSocket.OPEN) {
-                    isOnline = true;
-                }
-            });
-            
-            const profile = `
-Profile: ${user.username}
-Status: ${isOnline ? 'Online' : 'Offline'}
-            `.trim();
-            
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: profile
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({
-                type: 'system',
-                content: 'Failed to load user profile'
-            }));
-        }
-        return;
+        if (!targetUser) return sendSystem(ws, 'Usage: /whois <username>');
+        const result = await pool.query('SELECT username FROM users WHERE username = $1', [targetUser]);
+        if (!result.rows[0]) return sendSystem(ws, `User '${targetUser}' not found`);
+        const isOnline = [...wss.clients].some(client => client.userData.username === targetUser && client.readyState === WebSocket.OPEN);
+        return sendSystem(ws, `Profile: ${targetUser}\nStatus: ${isOnline ? 'Online' : 'Offline'}`);
     }
-    
-    // ADMIN ACCESS
-    if (cmd === '/admin@') {
-        ws.userData.isAdmin = true;
-        ws.send(JSON.stringify({ type: 'admin_granted' }));
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: 'Admin access granted.' 
-        }));
-        return;
-    }
-    
-    // TDTU COMMAND
-    if (cmd === '/tdtu') {
-        const tdtuArt = `
-████████╗██████╗ ████████╗██╗   ██╗
-╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██║  ██║   ██║   ██║   ██║
-   ██║   ██████╔╝   ██║   ╚██████╔╝
-   ╚═╝   ╚═════╝    ╚═╝    ╚═════╝ 
-Ton Duc Thang University
-        `.trim();
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: tdtuArt 
-        }));
-        return;
-    }
-    
-    // THEME COMMAND
-    if (cmd === '/theme') {
-        if (!ws.userData.isAdmin) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Admin access required.' 
-            }));
-            return;
-        }
-        
-        const theme = parts[1]?.toLowerCase();
-        const validThemes = ['default', 'purple', 'blue', 'red'];
-        
-        if (!theme) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `Usage: /theme <n>\nAvailable themes: ${validThemes.join(', ')}\nCurrent theme: ${currentTheme}` 
-            }));
-            return;
-        }
-        
-        if (validThemes.includes(theme)) {
-            currentTheme = theme;
-            broadcast(JSON.stringify({ type: 'theme', theme }));
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `Theme changed to: ${theme}` 
-            }));
-        } else {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `Invalid theme. Available: ${validThemes.join(', ')}` 
-            }));
-        }
-        return;
-    }
-    
-    // TITLE COMMAND
-    if (cmd === '/title') {
-        if (!ws.userData.isAdmin) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Admin access required.' 
-            }));
-            return;
-        }
-        
-        const newTitle = parts.slice(1).join(' ');
-        if (!newTitle) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `Usage: /title <new title>\nCurrent title: ${currentTitle}` 
-            }));
-            return;
-        }
-        
-        currentTitle = newTitle;
-        broadcast(JSON.stringify({ type: 'title', title: newTitle }));
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: `Title changed to: ${newTitle}` 
-        }));
-        return;
-    }
-    
-    // RAINBOW COLOR
-    if (cmd === '/rainbow') {
-        ws.userData.color = 'rainbow';
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: 'Rainbow mode activated!' 
-        }));
-        return;
-    }
-    
-    // DIRECT MESSAGE
+
+    if (cmd === '/tdtu') return sendSystem(ws, 'Ton Duc Thang University');
+    if (cmd === '/rainbow') { ws.userData.color = 'rainbow'; return sendSystem(ws, 'Rainbow mode activated!'); }
+
     if (cmd === '/dm' || cmd === '/msg') {
         const targetUser = parts[1];
         const message = parts.slice(2).join(' ');
-        
-        if (!targetUser || !message) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `Usage: /dm <username> <message>\nExample: /dm john Hello there!` 
-            }));
-            return;
-        }
-        
+        if (!targetUser || !message) return sendSystem(ws, 'Usage: /dm <username> <message>');
         let sent = false;
         wss.clients.forEach(client => {
             if (client.userData.username === targetUser && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({
-                    type: 'dm',
-                    from: ws.userData.username,
-                    to: targetUser,
-                    content: message,
-                    color: ws.userData.color
-                }));
+                client.send(JSON.stringify({ type: 'dm', from: ws.userData.username, to: targetUser, content: message, color: ws.userData.color }));
                 sent = true;
             }
         });
-        
-        if (sent) {
-            ws.send(JSON.stringify({
-                type: 'dm',
-                from: ws.userData.username,
-                to: targetUser,
-                content: message,
-                color: ws.userData.color
-            }));
-        } else {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: `User '${targetUser}' not found or offline` 
-            }));
-        }
-        return;
+        return sent ? ws.send(JSON.stringify({ type: 'dm', from: ws.userData.username, to: targetUser, content: message, color: ws.userData.color })) : sendSystem(ws, `User '${targetUser}' not found or offline`);
     }
-    
-    // USERS LIST
-    if (cmd === '/users' || cmd === '/who') {
-        const onlineUsers = [];
-        wss.clients.forEach(client => {
-            if (client.userData.isLoggedIn) {
-                onlineUsers.push(client.userData.username);
-            }
-        });
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: `Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}` 
-        }));
-        return;
-    }
-    
-    // PING
-    if (cmd === '/ping') {
-        ws.send(JSON.stringify({ 
-            type: 'pong', 
-            startTime: Date.now() 
-        }));
-        return;
-    }
-    
-    // CLEAR SCREEN
-    if (cmd === '/cls' || cmd === '/clear') {
-        ws.send(JSON.stringify({ type: 'clear_history' }));
-        return;
-    }
-    
-    // DATABASE VIEW
-    if (cmd === '/db') {
-        if (!ws.userData.isAdmin) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Admin access required.' 
-            }));
-            return;
-        }
-        
-        try {
-            const result = await pool.query(
-                'SELECT id, username, content, timestamp FROM current_chat ORDER BY timestamp DESC LIMIT 100'
-            );
-            ws.send(JSON.stringify({ 
-                type: 'database_view', 
-                data: result.rows 
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Database query failed' 
-            }));
-        }
-        return;
-    }
-    
-    // ARCHIVE CHAT
-    if (cmd === '/archive') {
-        if (!ws.userData.isAdmin) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Admin access required.' 
-            }));
-            return;
-        }
-        
-        try {
-            await pool.query(`
-                INSERT INTO history_archive (username, content, timestamp)
-                SELECT username, content, timestamp FROM current_chat
-            `);
-            
-            await pool.query('DELETE FROM current_chat');
-            
-            broadcast(JSON.stringify({ type: 'clear_history' }));
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Chat archived and cleared' 
-            }));
-        } catch (e) {
-            ws.send(JSON.stringify({ 
-                type: 'system', 
-                content: 'Archive failed' 
-            }));
-        }
-        return;
-    }
-    
-    // HELP
-    if (cmd === '/?') {
-        const helpText = ws.userData.isAdmin ? `
-Available Commands:
-/tdtu - Display TDTU logo
-/rainbow - Rainbow username color
-/note [text] - View or set personal note
-/profile or /me - View your profile
-/whois <user> - View user's profile
-/dm <user> <msg> - Send direct message
-/users or /who - List online users
-/ping - Check connection latency
-/cls - Clear screen
 
-Admin Commands:
-/theme <n> - Change theme (default/purple/blue/red)
-/title <text> - Change chat title
-/db - View database
-/archive - Archive and clear chat
-        `.trim() : `
-Available Commands:
-/tdtu - Display TDTU logo
-/rainbow - Rainbow username color
-/note [text] - View or set personal note
-/profile or /me - View your profile
-/whois <user> - View user's profile
-/dm <user> <msg> - Send direct message
-/users or /who - List online users
-/ping - Check connection latency
-/cls - Clear screen
-/? - Show this help
-        `.trim();
-        
-        ws.send(JSON.stringify({ 
-            type: 'system', 
-            content: helpText 
-        }));
+    if (cmd === '/users' || cmd === '/who') {
+        const onlineUsers = [...wss.clients].filter(client => client.userData.isLoggedIn).map(client => client.userData.username);
+        return sendSystem(ws, `Online users (${onlineUsers.length}): ${onlineUsers.join(', ')}`);
+    }
+    if (cmd === '/ping') return ws.send(JSON.stringify({ type: 'pong', startTime: Date.now() }));
+    if (cmd === '/cls' || cmd === '/clear') return ws.send(JSON.stringify({ type: 'clear_history' }));
+
+    if (cmd === '/theme') {
+        if (!ws.userData.isAdmin) return sendSystem(ws, 'Admin access required.');
+        const theme = parts[1]?.toLowerCase();
+        const validThemes = ['default', 'purple', 'blue', 'red'];
+        if (!validThemes.includes(theme)) return sendSystem(ws, `Invalid theme. Available: ${validThemes.join(', ')}`);
+        currentTheme = theme;
+        broadcast(JSON.stringify({ type: 'theme', theme }));
         return;
+    }
+
+    if (cmd === '/title') {
+        if (!ws.userData.isAdmin) return sendSystem(ws, 'Admin access required.');
+        const title = parts.slice(1).join(' ').slice(0, 100);
+        if (!title) return sendSystem(ws, `Usage: /title <new title>\nCurrent title: ${currentTitle}`);
+        currentTitle = title;
+        broadcast(JSON.stringify({ type: 'title', title }));
+        return;
+    }
+
+    if (cmd === '/db') {
+        if (!ws.userData.isAdmin) return sendSystem(ws, 'Admin access required.');
+        try {
+            const result = await pool.query('SELECT id, username, content, image_url, image_expires_at, timestamp FROM current_chat ORDER BY timestamp DESC LIMIT 100');
+            return ws.send(JSON.stringify({ type: 'database_view', data: result.rows }));
+        } catch (error) { return sendSystem(ws, 'Database query failed'); }
+    }
+
+    if (cmd === '/remove') {
+        if (!ws.userData.isAdmin) return sendSystem(ws, 'Admin access required.');
+        const id = Number(parts[1]);
+        if (!Number.isSafeInteger(id) || id < 1) return sendSystem(ws, 'Usage: /remove <image message id>');
+        try {
+            const result = await pool.query('UPDATE current_chat SET image_url = NULL, image_expires_at = NULL WHERE id = $1 AND image_url IS NOT NULL RETURNING image_url', [id]);
+            if (!result.rows[0]) return sendSystem(ws, 'Image message not found.');
+            await deleteImageFile(result.rows[0].image_url);
+            broadcast(JSON.stringify({ type: 'image_removed', id }));
+            return sendSystem(ws, `Image removed from message ${id}.`);
+        } catch (error) { return sendSystem(ws, 'Image removal failed.'); }
+    }
+
+    if (cmd === '/archive') {
+        if (!ws.userData.isAdmin) return sendSystem(ws, 'Admin access required.');
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('INSERT INTO history_archive (id, username, content, image_url, image_expires_at, timestamp) SELECT id, username, content, image_url, image_expires_at, timestamp FROM current_chat');
+            await client.query('DELETE FROM current_chat');
+            await client.query('COMMIT');
+            broadcast(JSON.stringify({ type: 'clear_history' }));
+            return sendSystem(ws, 'Chat archived and cleared');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            return sendSystem(ws, 'Archive failed');
+        } finally {
+            client.release();
+        }
+    }
+
+    if (cmd === '/?') {
+        const admin = ws.userData.isAdmin ? '\nAdmin Commands:\n/theme <n>\n/title <text>\n/db\n/remove <image message id>\n/archive' : '';
+        return sendSystem(ws, `/tdtu\n/rainbow\n/note [text]\n/profile\n/whois <user>\n/dm <user> <msg>\n/users\n/ping\n/cls${admin}`);
     }
 }
 
-async function loginUser(ws, username) {
+function authError(ws, form, message) {
+    ws.send(JSON.stringify({ type: 'auth_error', form, message }));
+}
+
+async function loginUser(ws, username, isAdmin) {
     ws.userData.username = username;
     ws.userData.isLoggedIn = true;
+    ws.userData.isAdmin = Boolean(isAdmin);
     ws.userData.color = getRandomColor();
-
-    ws.send(JSON.stringify({ 
-        type: 'auth_success', 
-        message: 'Login successful!' 
-    }));
-
-    ws.send(JSON.stringify({ 
-        type: 'init', 
-        username, 
-        color: ws.userData.color, 
-        authenticated: true 
-    }));
-
+    ws.send(JSON.stringify({ type: 'auth_success', message: 'Login successful!' }));
+    ws.send(JSON.stringify({ type: 'init', username, color: ws.userData.color, authenticated: true }));
     try {
-        const history = await pool.query(
-            'SELECT username, content, timestamp FROM current_chat ORDER BY timestamp ASC LIMIT $1', 
-            [HISTORY_LIMIT]
-        );
-        
-        ws.send(JSON.stringify({ 
-            type: 'history', 
-            content: history.rows 
-        }));
-    } catch (e) {
-        console.error('Error loading history:', e);
-    }
-
-    broadcast(JSON.stringify({ 
-        type: 'system', 
-        content: `${username} joined the chat.` 
-    }));
+        const history = await pool.query('SELECT id, username, content, image_url AS "imageUrl", timestamp FROM current_chat ORDER BY timestamp DESC LIMIT $1', [HISTORY_LIMIT]);
+        ws.send(JSON.stringify({ type: 'history', content: history.rows.reverse() }));
+    } catch (error) { console.error('Error loading history:', error.message); }
+    broadcast(JSON.stringify({ type: 'system', content: `${username} joined the chat.` }));
 }
 
-async function saveAndBroadcast(username, color, content) {
+async function saveAndBroadcast(username, color, content, imageUrl = null, imageExpiresAt = null) {
     const timestamp = new Date().toISOString();
-    
     try {
-        await pool.query(
-            'INSERT INTO current_chat (username, content, timestamp) VALUES ($1, $2, $3)', 
-            [username, content, timestamp]
+        const result = await pool.query(
+            'INSERT INTO current_chat (username, content, image_url, image_expires_at, timestamp) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+            [username, content, imageUrl, imageExpiresAt, timestamp]
         );
-        
-        broadcast(JSON.stringify({ 
-            type: 'message', 
-            username, 
-            color, 
-            content, 
-            timestamp 
+        broadcast(JSON.stringify({ type: 'message', id: result.rows[0].id, username, color, content, imageUrl, timestamp }));
+    } catch (error) { console.error('Error saving message:', error.message); }
+}
+
+async function deleteImageFile(imageUrl) {
+    const filename = path.basename(imageUrl || '');
+    if (!isUploadFilename(filename)) return;
+    try { await fs.unlink(path.join(uploadDir, filename)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+
+async function cleanupExpiredImages() {
+    try {
+        const [current, archived, files] = await Promise.all([
+            pool.query('UPDATE current_chat SET image_url = NULL, image_expires_at = NULL WHERE image_expires_at <= NOW() AND image_url IS NOT NULL RETURNING image_url'),
+            pool.query('UPDATE history_archive SET image_url = NULL, image_expires_at = NULL WHERE image_expires_at <= NOW() AND image_url IS NOT NULL RETURNING image_url'),
+            fs.readdir(uploadDir, { withFileTypes: true })
+        ]);
+        await Promise.all([...current.rows, ...archived.rows].map(row => deleteImageFile(row.image_url)));
+        const now = Date.now();
+        await Promise.all(files.filter(file => file.isFile() && isUploadFilename(file.name)).map(async file => {
+            const filePath = path.join(uploadDir, file.name);
+            const stat = await fs.stat(filePath);
+            if (now - stat.mtimeMs >= IMAGE_LIFETIME_MS) await fs.unlink(filePath);
         }));
-    } catch (e) {
-        console.error('Error saving message:', e);
-    }
+        for (const [imageUrl, data] of uploadedImages) if (data.expiresAt <= now) uploadedImages.delete(imageUrl);
+    } catch (error) { console.error('Image cleanup failed:', error.message); }
 }
 
 function broadcast(data) {
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.userData.isLoggedIn) {
-            client.send(data);
-        }
+        if (client.readyState === WebSocket.OPEN && client.userData.isLoggedIn) client.send(data);
     });
 }
 
@@ -751,12 +370,15 @@ function getRandomColor() {
 
 const PORT = process.env.PORT || 3000;
 
-initDatabase().then(() => {
-    server.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-        console.log(`Database connected to Neon`);
+if (require.main === module) {
+    Promise.all([initDatabase(), fs.mkdir(uploadDir, { recursive: true })]).then(async () => {
+        await cleanupExpiredImages();
+        setInterval(cleanupExpiredImages, 60 * 60 * 1000).unref();
+        server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    }).catch(error => {
+        console.error('Failed to start server:', error);
+        process.exit(1);
     });
-}).catch(err => {
-    console.error('Failed to start server:', err);
-    process.exit(1);
-});
+}
+
+module.exports = { cleanupExpiredImages, deleteImageFile };
