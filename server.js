@@ -22,6 +22,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 const TICKET_LIFETIME_MS = 60 * 1000;
 const MAX_MESSAGE_LENGTH = 4000;
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 let currentTheme = 'default';
 let currentTitle = 'Classroom';
 
@@ -125,8 +126,22 @@ wss.on('connection', async (ws, req) => {
     ws.send(JSON.stringify({ type: 'title', title: currentTitle }));
     ws.send(JSON.stringify({ type: 'system', content: 'Welcome! Please login or register.' }));
 
+    // Idle timeout: disconnect if no activity for 30 min
+    let idleTimer = null;
+    function resetIdleTimer() {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'system', content: 'Disconnected due to inactivity (30 min).' }));
+                ws.close();
+            }
+        }, IDLE_TIMEOUT_MS);
+    }
+    resetIdleTimer();
+
     ws.on('message', async message => {
         try {
+            resetIdleTimer();
             const data = JSON.parse(message.toString());
             if (data.type === 'resume') {
                 const resume = readResumeToken(data.token);
@@ -160,7 +175,7 @@ wss.on('connection', async (ws, req) => {
         }
     });
 
-    ws.on('close', () => {});
+    ws.on('close', () => { if (idleTimer) clearTimeout(idleTimer); });
     ws.on('error', error => console.error('WebSocket error:', error.message));
 });
 

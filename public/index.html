@@ -216,20 +216,31 @@
         #input-area {
             display: flex;
             gap: 10px;
+            align-items: center;
         }
 
-        .chat-image {
-            display: block;
-            max-width: min(100%, 480px);
-            max-height: 360px;
-            margin-top: 8px;
-            object-fit: contain;
-            border: 1px solid var(--border-color);
+        .image-upload-btn {
+            background: var(--input-bg);
+            border: 1px dashed var(--border-color);
+            color: var(--text-color);
+            padding: 8px 12px;
             border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.3s;
+        }
+
+        .image-upload-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background: rgba(0, 255, 0, 0.1);
+        }
+
+        #imageInput {
+            display: none;
         }
 
         #uploadStatus {
-            align-self: center;
             color: #888;
             font-size: 0.8em;
         }
@@ -354,6 +365,48 @@
         .close-modal:hover {
             color: var(--accent-color);
         }
+
+        #context-menu {
+            display: none;
+            position: fixed;
+            background: var(--header-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            z-index: 1001;
+        }
+
+        #context-menu div {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        #context-menu div:hover {
+            background: var(--accent-color);
+            color: #000;
+        }
+
+        #copy-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-color);
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 1002;
+        }
+
+        #copy-toast.show {
+            opacity: 1;
+        }
+
     </style>
 </head>
 <body>
@@ -410,7 +463,8 @@
 
     <div id="input-area" style="display: none;">
         <input type="text" id="messageInput" placeholder="Type /? for commands..." autofocus>
-        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Upload image">
+        <button id="imageUploadBtn" class="image-upload-btn" onclick="document.getElementById('imageInput').click()" title="Upload image">+</button>
+        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
         <span id="uploadStatus" aria-live="polite"></span>
         <button onclick="sendMessage()">SEND</button>
     </div>
@@ -425,6 +479,14 @@
             <div id="dbTableContainer"></div>
         </div>
     </div>
+
+    <!-- Context Menu for Copy -->
+    <div id="context-menu">
+        <div onclick="copyMessageText()">Copy</div>
+    </div>
+
+    <!-- Copy Toast Notification -->
+    <div id="copy-toast">Copied!</div>
 
     <script>
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -748,6 +810,15 @@
             contentDiv.appendChild(textSpan);
             div.appendChild(contentDiv);
 
+            // Right-click to copy message text
+            if (username && text) {
+                div.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    currentlyCopiedElement = textSpan;
+                    showContextMenu(e.clientX, e.clientY);
+                });
+            }
+
             if (timestamp) {
                 const timeSpan = document.createElement('span');
                 timeSpan.className = 'timestamp';
@@ -802,6 +873,39 @@
             const modal = document.getElementById('dbModal');
             if (event.target === modal) {
                 closeDbModal();
+            }
+        }
+
+        // --- Copy-to-Clipboard ---
+        let currentlyCopiedElement = null;
+
+        function showContextMenu(x, y) {
+            const menu = document.getElementById('context-menu');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.style.display = 'block';
+            setTimeout(() => document.addEventListener('click', hideContextMenu), 0);
+        }
+
+        function hideContextMenu() {
+            document.getElementById('context-menu').style.display = 'none';
+            document.removeEventListener('click', hideContextMenu);
+        }
+
+        function showCopyToast() {
+            const toast = document.getElementById('copy-toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        }
+
+        function copyMessageText() {
+            hideContextMenu();
+            if (currentlyCopiedElement && currentlyCopiedElement.textContent) {
+                navigator.clipboard.writeText(currentlyCopiedElement.textContent).then(() => {
+                    showCopyToast();
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                });
             }
         }
 
