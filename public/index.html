@@ -236,6 +236,22 @@
             background: rgba(0, 255, 0, 0.1);
         }
 
+        .logout-btn {
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            color: var(--error-color);
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--error-color);
+            background: rgba(255, 68, 68, 0.1);
+        }
+
         #imageInput {
             display: none;
         }
@@ -467,6 +483,7 @@
         <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none">
         <span id="uploadStatus" aria-live="polite"></span>
         <button onclick="sendMessage()">SEND</button>
+        <button id="logoutBtn" class="logout-btn" onclick="logout()" title="Logout" style="display: none;">Logout</button>
     </div>
 
     <!-- Database Modal -->
@@ -735,10 +752,29 @@
             statusSpan.textContent = 'Authenticated';
             statusSpan.style.color = 'var(--success-color)';
             messageInput.focus();
-            
+            document.getElementById('logoutBtn').style.display = 'inline-block';
+
             // Re-enable buttons for potential future use
             document.getElementById('loginBtn').disabled = false;
             document.getElementById('signupBtn').disabled = false;
+        }
+
+        function logout() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+            isAuthenticated = false;
+            usernameInput.disabled = true;
+            colorInput.disabled = true;
+            inputArea.style.display = 'none';
+            loginOverlay.style.display = 'flex';
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('logoutBtn').style.display = 'none';
+            statusSpan.textContent = 'Disconnected';
+            statusSpan.style.color = 'var(--error-color)';
+            chatContainer.innerHTML = '';
+            showLogin();
         }
 
         function attemptReconnect() {
