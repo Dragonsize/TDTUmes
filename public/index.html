@@ -407,6 +407,52 @@
         .ai-input { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border-color); }
         .ai-input input { flex: 1; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); color: #fff; border-radius: 4px; font-family: inherit; }
         .ai-input input:focus { outline: none; border-color: var(--accent-color); }
+
+        /* Context Menu */
+        #context-menu {
+            display: none;
+            position: fixed;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            z-index: 9999;
+            min-width: 120px;
+            padding: 4px 0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+        }
+        #context-menu div {
+            padding: 8px 16px;
+            cursor: pointer;
+            color: var(--text-color);
+            font-size: 0.9em;
+        }
+        #context-menu div:hover {
+            background: var(--header-bg);
+            color: var(--accent-color);
+        }
+
+        /* Copy Toast */
+        #copy-toast {
+            display: none;
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-color);
+            color: #000;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.9em;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        #copy-toast.show {
+            display: block;
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
@@ -548,6 +594,14 @@
             <div id="dbTableContainer"></div>
         </div>
     </div>
+
+    <!-- Context Menu for Copy -->
+    <div id="context-menu">
+        <div onclick="copyMessageText()">Copy</div>
+    </div>
+
+    <!-- Copy Toast Notification -->
+    <div id="copy-toast">Copied!</div>
 
     <script>
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -995,6 +1049,13 @@
             contentDiv.appendChild(textSpan);
             div.appendChild(contentDiv);
 
+            // Right-click to copy
+            contentDiv.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                currentlyCopiedElement = textSpan;
+                showContextMenu(e.clientX, e.clientY);
+            });
+
             if (timestamp) {
                 const timeSpan = document.createElement('span');
                 timeSpan.className = 'timestamp';
@@ -1116,6 +1177,46 @@
 
         var ru = getCookie('rememberUsername');
         if (ru) { var lu = document.getElementById('loginUsername'); if (lu) lu.value = ru; }
+
+        // --- Copy-to-Clipboard Feature ---
+        let currentlyCopiedElement = null;
+
+        function showContextMenu(x, y, callback) {
+            const menu = document.getElementById('context-menu');
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            menu.onclick = (e) => {
+                e.stopPropagation();
+                if (callback) callback();
+                hideContextMenu();
+            };
+            document.addEventListener('click', hideContextMenu);
+            menu.style.display = 'block';
+        }
+
+        function hideContextMenu() {
+            const menu = document.getElementById('context-menu');
+            document.removeEventListener('click', hideContextMenu);
+            menu.style.display = 'none';
+        }
+
+        function showCopyToast() {
+            const toast = document.getElementById('copy-toast');
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        function copyMessageText() {
+            if (currentlyCopiedElement && currentlyCopiedElement.textContent) {
+                navigator.clipboard.writeText(currentlyCopiedElement.textContent).then(() => {
+                    showCopyToast();
+                }).catch(err => {
+                    console.error('Failed to copy text: ', err);
+                });
+            }
+        }
 
         // Initialize connection
         connectWebSocket();
